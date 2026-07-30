@@ -1,11 +1,15 @@
 import asyncio
+from uuid import UUID, uuid4
 
 import httpx
+import pytest
+from pydantic import ValidationError
 
 from app import create_app
 from approaches.chat_interface import ChatWithHistory
 from controller.chat_controller import ChatController
-from object.domain import ChatRequest, ChatType
+from object.domain import ChatSessionRequest, ChatType
+from object.errors import NotFoundError
 
 
 def test_chat_with_history_stores_ordered_request_response_pairs():
@@ -20,58 +24,146 @@ def test_chat_with_history_stores_ordered_request_response_pairs():
     ]
 
 
-def test_chat_controller_loads_test_interface_and_echoes_request():
-    controller = ChatController(ChatType.TEST_CHAT)
+def test_controller_creates_and_continues_an_isolated_session():
+    controller = ChatController()
+    first = asyncio.run(
+        controller.create_response(
+            ChatSessionRequest(text="first", chat_type=ChatType.TEST_CHAT)
+        )
+    )
+    second = asyncio.run(
+        controller.create_response(
+            ChatSessionRequest(text="second", session_id=first.session_id)
+        )
+    )
 
-    assert type(controller.chat_approach) is ChatWithHistory
-    response = asyncio.run(controller.create_response(ChatRequest(text="hello")))
-    assert response.text == "hello"
+    assert isinstance(first.session_id, UUID)
+    assert second.session_id == first.session_id
+    history = controller.get_history(first.session_id)
+    assert [entry.model_dump() for entry in history] == [
+        {"request": "first", "response": "first"},
+        {"request": "second", "response": "second"},
+    ]
 
 
-def test_chat_endpoint_uses_test_interface_by_default():
-    async def post() -> httpx.Response:
-        transport = httpx.ASGITransport(app=create_app())
-        async with httpx.AsyncClient(
-            transport=transport, base_url="http://testserver"
-        ) as client:
-            return await client.post("/api/chat/response", json={"text": "hello"})
+def test_controller_keeps_session_histories_separate():
+    controller = ChatController()
+    first_session = asyncio.run(
+        controller.create_response(
+            ChatSessionRequest(text="first", chat_type=ChatType.TEST_CHAT)
+        )
+    )
+    second_session = asyncio.run(
+        controller.create_response(
+            ChatSessionRequest(text="other", chat_type=ChatType.DCR_CHAT)
+        )
+    )
 
-    response = asyncio.run(post())
+    assert first_session.session_id != second_session.session_id
+    assert controller.get_history(first_session.session_id)[0].request == "first"
+    assert controller.get_history(second_session.session_id)[0].request == "other"
 
-    assert response.status_code == 200
-    assert response.json() == {"text": "hello"}
+
+def test_controller_deletes_the_session_and_its_history():
+    controller = ChatController()
+    response = asyncio.run(
+        controller.create_response(
+            ChatSessionRequest(text="hello", chat_type=ChatType.TEST_CHAT)
+        )
+    )
+
+    controller.delete_session(response.session_id)
+
+    with pytest.raises(NotFoundError):
+        controller.get_history(response.session_id)
+    with pytest.raises(NotFoundError):
+        controller.delete_session(response.session_id)
 
 
-def test_chat_controller_loads_all_approaches():
-    expected_names = {
+@pytest.mark.parametrize(
+    "data",
+    [
+        {"text": "hello"},
+        {
+            "text": "hello",
+            "chat_type": ChatType.TEST_CHAT,
+            "session_id": str(uuid4()),
+        },
+    ],
+)
+def test_session_request_requires_exactly_one_session_selector(data):
+    with pytest.raises(ValidationError):
+        ChatSessionRequest.model_validate(data)
+
+
+def test_chat_controller_registers_all_approaches():
+    assert {
+        chat_type: approach.__name__
+        for chat_type, approach in ChatController.APPROACHES.items()
+    } == {
         ChatType.TEST_CHAT: "ChatWithHistory",
         ChatType.LLM_CHAT: "LLMChat",
         ChatType.DCR_CHAT: "DcrChat",
         ChatType.DCR_CONTROLLER_CHAT: "LLMDcrControllerChat",
     }
 
-    for chat_type, class_name in expected_names.items():
-        assert ChatController(chat_type).chat_approach.__class__.__name__ == class_name
 
-
-def test_chat_api_lists_selects_and_uses_an_approach():
+def test_chat_api_session_lifecycle_and_validation():
     async def exercise_api():
         transport = httpx.ASGITransport(app=create_app())
         async with httpx.AsyncClient(
             transport=transport, base_url="http://testserver"
         ) as client:
             options = await client.get("/api/chat/approaches")
-            selected = await client.post(
-                f"/api/chat/approach/{ChatType.DCR_CHAT.value}"
+            invalid = await client.post("/api/chat/response", json={"text": "hello"})
+            first = await client.post(
+                "/api/chat/response",
+                json={"text": "first", "chat_type": ChatType.TEST_CHAT},
             )
-            current = await client.get("/api/chat/approach")
-            response = await client.post(
-                "/api/chat/response", json={"text": "selected chat"}
+            session_id = first.json()["session_id"]
+            second = await client.post(
+                "/api/chat/response",
+                json={"text": "second", "session_id": session_id},
             )
-            await client.post(f"/api/chat/approach/{ChatType.TEST_CHAT.value}")
-            return options, selected, current, response
+            history = await client.post(
+                "/api/chat/history", json={"session_id": session_id}
+            )
+            deleted = await client.request(
+                "DELETE", "/api/chat/session", json={"session_id": session_id}
+            )
+            missing_history = await client.post(
+                "/api/chat/history", json={"session_id": session_id}
+            )
+            missing_chat = await client.post(
+                "/api/chat/response",
+                json={"text": "third", "session_id": session_id},
+            )
+            missing_delete = await client.request(
+                "DELETE", "/api/chat/session", json={"session_id": session_id}
+            )
+            return (
+                options,
+                invalid,
+                first,
+                second,
+                history,
+                deleted,
+                missing_history,
+                missing_chat,
+                missing_delete,
+            )
 
-    options, selected, current, response = asyncio.run(exercise_api())
+    (
+        options,
+        invalid,
+        first,
+        second,
+        history,
+        deleted,
+        missing_history,
+        missing_chat,
+        missing_delete,
+    ) = asyncio.run(exercise_api())
 
     assert options.status_code == 200
     assert options.json() == [
@@ -80,31 +172,19 @@ def test_chat_api_lists_selects_and_uses_an_approach():
         {"name": "DCR_CHAT", "value": 1},
         {"name": "DCR_CONTROLLER_CHAT", "value": 2},
     ]
-    assert selected.json() == {"name": "DCR_CHAT", "value": 1}
-    assert current.json() == selected.json()
-    assert response.json() == {"text": "selected chat"}
-
-
-def test_chat_history_stores_ordered_request_response_pairs_and_can_be_cleared():
-    async def exercise_api():
-        transport = httpx.ASGITransport(app=create_app())
-        async with httpx.AsyncClient(
-            transport=transport, base_url="http://testserver"
-        ) as client:
-            await client.delete("/api/chat/history")
-            await client.post("/api/chat/response", json={"text": "first"})
-            await client.post("/api/chat/response", json={"text": "second"})
-            history = await client.get("/api/chat/history")
-            cleared = await client.delete("/api/chat/history")
-            empty_history = await client.get("/api/chat/history")
-            return history, cleared, empty_history
-
-    history, cleared, empty_history = asyncio.run(exercise_api())
-
-    assert history.status_code == 200
+    assert invalid.status_code == 422
+    assert first.status_code == 200
+    assert UUID(first.json()["session_id"])
+    assert first.json()["text"] == "first"
+    assert second.json() == {
+        "text": "second",
+        "session_id": first.json()["session_id"],
+    }
     assert history.json() == [
         {"request": "first", "response": "first"},
         {"request": "second", "response": "second"},
     ]
-    assert cleared.status_code == 204
-    assert empty_history.json() == []
+    assert deleted.status_code == 204
+    assert missing_history.status_code == 404
+    assert missing_chat.status_code == 404
+    assert missing_delete.status_code == 404

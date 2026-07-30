@@ -10,7 +10,13 @@ from typing import Any
 from dotenv import load_dotenv
 from openai import AsyncOpenAI
 
-from object.domain import LLMChatResponse, LLMSettings
+from object.domain import (
+    ChatHistoryEntry,
+    ChatRequest,
+    ChatResponse,
+    LLMChatRequest,
+    LLMSettings,
+)
 
 
 class LlmTool:
@@ -18,41 +24,65 @@ class LlmTool:
 
     def __init__(
         self,
+        instructions: str | None = None,
         settings: LLMSettings | None = None,
         client: AsyncOpenAI | None = None,
     ) -> None:
-        self._settings = settings
-        self._client = client
-
-    @property
-    def settings(self) -> LLMSettings:
-        if self._settings is None:
-            self._settings = self._load_settings()
-        return self._settings
-
-    @property
-    def client(self) -> AsyncOpenAI:
-        if self._client is None:
-            self._client = AsyncOpenAI(
+        self.settings = settings or self._load_settings()
+        self.client = client or AsyncOpenAI(
                 base_url=self.settings.endpoint,
                 api_key=self.settings.api_key,
             )
-        return self._client
+        self.instructions = instructions
 
-    async def request(self, input_text: str) -> Any:
-        return await self.client.responses.create(
-            model=self.settings.deployment_name,
-            input=input_text,
-        )
+    async def request(
+        self,
+        input_request: LLMChatRequest,
+        history: list[ChatHistoryEntry] | None = None,
+    ) -> Any:
+        instruct = input_request.instructions or self.instructions
+        conversation = []
+        if history:
+            for entry in history:
+                conversation.extend(
+                    [
+                        {"role": "user", "content": entry.request},
+                        {"role": "assistant", "content": entry.response},
+                    ]
+                )
+            conversation.append({"role": "user", "content": input_request.text})
+
+        request_arguments = {
+            "model": self.settings.deployment_name,
+            "input": conversation if history else input_request.text,
+        }
+        if instruct:
+            request_arguments["instructions"] = instruct
+        return await self.client.responses.create(**request_arguments)
+
+    async def request_text(self, input_text: str) -> Any:
+        return await self.request(LLMChatRequest(text=input_text))
 
     async def create_response(
         self,
-        input_text: str,
+        input_request: LLMChatRequest | ChatRequest | str,
+        history: list[ChatHistoryEntry] | None = None,
         response_factory: Callable[[str], Awaitable[Any]] | None = None,
-    ) -> LLMChatResponse:
-        factory = response_factory or self.request
-        response = await factory(input_text)
-        return LLMChatResponse(text=response.output_text)
+    ) -> ChatResponse:
+        if isinstance(input_request, str):
+            input_request = LLMChatRequest(text=input_request)
+        elif not isinstance(input_request, LLMChatRequest):
+            input_request = LLMChatRequest(
+                text=input_request.text,
+                chat_type=input_request.chat_type,
+            )
+
+        response = (
+            await response_factory(input_request.text)
+            if response_factory is not None
+            else await self.request(input_request, history)
+        )
+        return ChatResponse(text=response.output_text)
 
     def _load_settings(self) -> LLMSettings:
         load_dotenv(self.PROJECT_ROOT / ".env")

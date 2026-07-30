@@ -1,209 +1,333 @@
+"""Export object-centric DCR graphs to the DCR.js editor XML format."""
+
+from __future__ import annotations
+
 from lxml import etree
 
-from pm4py.objects.dcr.utils.utils import clean_input
+from pm4py.objects.dcr.ocdcr.obj import (
+    DcrActivity,
+    DcrBounds,
+    DcrGraph,
+    DcrNesting,
+    DcrParentElement,
+    DcrPoint,
+    DcrRelation,
+    DcrSetValue,
+    DcrSpawnContainer,
+    DcrSubgraph,
+    RelationType,
+)
 
 
-def export_dcr_xml(graph, output_file_name, dcr_title='DCR from pm4py', replace_whitespace=' '):
-    '''
-    Writes a DCR graph object to disk in the ``.xml`` file format (exported as ``.xml`` file).
-    The file is to be visualised using the following link: https://hugoalopez-dtu.github.io/dcr-js/
-    Tamo et al. "An Open-Source Modeling Editor for Declarative Process Models" https://ceur-ws.org/Vol-3552/paper-5.pdf
-    Parameters
-    -----------
-    dcr
-        the DCR graph
-    output_file_name
-        dcrxml file name
-    dcr_title
-        title of the DCR graph
-    replace_whitespace
-        replace any white space characters with a character of your choice
-    '''
-    graph = clean_input(graph, white_space_replacement=replace_whitespace, all=True)
-    # event_labels = list(graph.label_map.keys())
-    # event_ids = []
-    # for event in list(graph.label_map.values()):
-    #     for event_id in event:
-    #         event_ids.append(event_id)
+DCR_NAMESPACE = "http://tk/schema/dcr"
+DCR_DI_NAMESPACE = "http://tk/schema/dcrDi"
+DC_NAMESPACE = "http://www.omg.org/spec/DD/20100524/DC"
+NSMAP = {"dcr": DCR_NAMESPACE, "dcrDi": DCR_DI_NAMESPACE, "dc": DC_NAMESPACE}
 
-    root = etree.Element("dcrgraph")
-    if dcr_title:
-        root.set("title", dcr_title)
-    specification = etree.SubElement(root, "specification")
-    resources = etree.SubElement(specification, "resources")
-    events = etree.SubElement(resources, "events")
-    subprocesses = etree.SubElement(resources, "subProcesses")
-    labels = etree.SubElement(resources, "labels")
-    labelMappings = etree.SubElement(resources, "labelMappings")
-
-    constraints = etree.SubElement(specification, "constraints")
-    conditions = etree.SubElement(constraints, "conditions")
-    responses = etree.SubElement(constraints, "responses")
-    excludes = etree.SubElement(constraints, "excludes")
-    includes = etree.SubElement(constraints, "includes")
-
-    runtime = etree.SubElement(root, "runtime")
-    marking = etree.SubElement(runtime, "marking")
-    executed = etree.SubElement(marking, "executed")
-    included = etree.SubElement(marking, "included")
-    pendingResponse = etree.SubElement(marking, "pendingResponses")
-
-    # Each event's coordinates for visualisation
-    xcoord = {}
-    ycoord = {}
-    x = 0
-    y = 0
-    for event in graph.events:
-        xcoord[event] = x
-        ycoord[event] = y
-        x += 300
-
-        if x > 1200:
-            x = 0
-            y += 300
-
-    for event in graph.events:
-        xml_event = etree.SubElement(events, "event")
-        xml_event.set("id", event)
-        xml_event_custom = etree.SubElement(xml_event, "custom")
-        xml_visual = etree.SubElement(xml_event_custom, "visualization")
-        xml_location = etree.SubElement(xml_visual, "location")
-        xml_location.set("xLoc", str(xcoord[event]))
-        xml_location.set("yLoc", str(ycoord[event]))
-        xml_size = etree.SubElement(xml_visual, "size")
-        xml_size.set("width", "130")
-        xml_size.set("height", "150")
-        xml_label = etree.SubElement(labels, "label")
-        xml_label.set("id", event)
-        xml_labelMapping = etree.SubElement(labelMappings, "labelMapping")
-        xml_labelMapping.set("eventId", event)
-        # label_id = event_labels[event_ids.index(event)]
-        label_id = graph.label_map[event] if event in graph.label_map else event
-        xml_labelMapping.set("labelId", label_id)
-
-        for event_prime in graph.events:
-            if event_prime in graph.conditions and event in graph.conditions[event_prime]:
-                xml_condition = etree.SubElement(conditions, "condition")
-                xml_condition.set("sourceId", event)
-                xml_condition.set("targetId", event_prime)
-                xml_condition_custom = etree.SubElement(xml_condition, "custom")
-                xml_waypoints = etree.SubElement(xml_condition_custom, "waypoints")
-                create_arrows(xml_waypoints, xcoord,ycoord, event, event_prime)
-                xml_custom_id = etree.SubElement(xml_condition_custom, "id")
-                xml_custom_id.set("id", "Relation_" + event + "_" + event_prime + "_condition")
-            if event in graph.responses and event_prime in graph.responses[event]:
-                xml_response = etree.SubElement(responses, "response")
-                xml_response.set("sourceId", event)
-                xml_response.set("targetId", event_prime)
-                xml_response_custom = etree.SubElement(xml_response, "custom")
-                xml_waypoints = etree.SubElement(xml_response_custom, "waypoints")
-                create_arrows(xml_waypoints, xcoord, ycoord, event, event_prime)
-                xml_custom_id = etree.SubElement(xml_response_custom, "id")
-                xml_custom_id.set("id", "Relation_" + event + "_" + event_prime + "_response")
-            if event in graph.includes and event_prime in graph.includes[event]:
-                xml_include = etree.SubElement(includes, "include")
-                xml_include.set("sourceId", event)
-                xml_include.set("targetId", event_prime)
-                xml_include_custom = etree.SubElement(xml_include, "custom")
-                xml_waypoints = etree.SubElement(xml_include_custom, "waypoints")
-                create_arrows(xml_waypoints, xcoord, ycoord, event, event_prime)
-                xml_custom_id = etree.SubElement(xml_include_custom, "id")
-                xml_custom_id.set("id", "Relation_" + event + "_" + event_prime + "_include")
-            if event in graph.excludes and event_prime in graph.excludes[event]:
-                xml_exclude = etree.SubElement(excludes, "exclude")
-                xml_exclude.set("sourceId", event)
-                xml_exclude.set("targetId", event_prime)
-                xml_exclude_custom = etree.SubElement(xml_exclude, "custom")
-                xml_waypoints = etree.SubElement(xml_exclude_custom, "waypoints")
-
-                # Creates a self-exclude arrow to avoid having just the arrowhead sitting at the centre of the event
-                if event == event_prime:
-                    xml_waypoint = etree.SubElement(xml_waypoints, "waypoint")
-                    xml_waypoint.set("x", str(xcoord[event]+65))
-                    xml_waypoint.set("y", str(ycoord[event]+150))
-                    xml_waypoint = etree.SubElement(xml_waypoints, "waypoint")
-                    xml_waypoint.set("x", str(xcoord[event]+65))
-                    xml_waypoint.set("y", str(ycoord[event]+175))
-                    xml_waypoint = etree.SubElement(xml_waypoints, "waypoint")
-                    xml_waypoint.set("x", str(xcoord[event]-25))
-                    xml_waypoint.set("y", str(ycoord[event]+175))
-                    xml_waypoint = etree.SubElement(xml_waypoints, "waypoint")
-                    xml_waypoint.set("x", str(xcoord[event]-25))
-                    xml_waypoint.set("y", str(ycoord[event]+75))
-                    xml_waypoint = etree.SubElement(xml_waypoints, "waypoint")
-                    xml_waypoint.set("x", str(xcoord[event]))
-                    xml_waypoint.set("y", str(ycoord[event]+75))
-                else:
-                    create_arrows(xml_waypoints, xcoord, ycoord, event, event_prime)
-                xml_custom_id = etree.SubElement(xml_exclude_custom, "id")
-                xml_custom_id.set("id", "Relation_" + event + "_" + event_prime + "_exclude")
-
-        if event in graph.marking.executed:
-            marking_exec = etree.SubElement(executed, "event")
-            marking_exec.set("id", event)
-        if event in graph.marking.included:
-            marking_incl = etree.SubElement(included, "event")
-            marking_incl.set("id", event)
-        if event in graph.marking.pending:
-            marking_pend = etree.SubElement(pendingResponse, "event")
-            marking_pend.set("id", event)
-
-    tree = etree.ElementTree(root)
-    tree.write(output_file_name, pretty_print=True, xml_declaration=True, encoding="utf-8", standalone="yes")
+RELATION_NAMES = {
+    RelationType.S: "spawn",
+    RelationType.E: "exclude",
+    RelationType.I: "include",
+    RelationType.N: "noresponse",
+    RelationType.R: "response",
+    RelationType.V: "setValue",
+    RelationType.C: "condition",
+    RelationType.M: "milestone",
+}
 
 
-def create_arrows(xml_waypoints, xcoord, ycoord, event, event_prime):
-    # Helper function that connects two events with corresponding constraint arrow
-    if xcoord[event] < xcoord[event_prime] and ycoord[event] < ycoord[event_prime]:
-        xoffset = 130
-        xprimeoffset = 0
-        yoffset = 75
-        yprimeoffset = 75
-    elif xcoord[event] < xcoord[event_prime] and ycoord[event] > ycoord[event_prime]:
-        xoffset = 130
-        xprimeoffset = 0
-        yoffset = 75
-        yprimeoffset = 75
-    elif xcoord[event] > xcoord[event_prime] and ycoord[event] < ycoord[event_prime]:
-        xoffset = 0
-        xprimeoffset = 130
-        yoffset = 75
-        yprimeoffset = 75
-    elif xcoord[event] > xcoord[event_prime] and ycoord[event] > ycoord[event_prime]:
-        xoffset = 0
-        xprimeoffset = 130
-        yoffset = 75
-        yprimeoffset = 75
-    elif xcoord[event] == xcoord[event_prime] and ycoord[event] < ycoord[event_prime]:
-        xoffset = 65
-        xprimeoffset = 65
-        yoffset = 150
-        yprimeoffset = 0
-    elif xcoord[event] == xcoord[event_prime] and ycoord[event] > ycoord[event_prime]:
-        xoffset = 65
-        xprimeoffset = 65
-        yoffset = 0
-        yprimeoffset = 150
-    elif xcoord[event] < xcoord[event_prime] and ycoord[event] == ycoord[event_prime]:
-        xoffset = 130
-        xprimeoffset = 0
-        yoffset = 75
-        yprimeoffset = 75
-    elif xcoord[event] > xcoord[event_prime] and ycoord[event] == ycoord[event_prime]:
-        xoffset = 0
-        xprimeoffset = 130
-        yoffset = 75
-        yprimeoffset = 75
+def export_dcr_xml(
+    graph: DcrGraph,
+    output_file_name,
+    dcr_title="DCR from pm4py",
+    replace_whitespace=" ",
+):
+    """Write a canonical object-centric graph as DCR.js editor XML."""
+    del dcr_title, replace_whitespace  # Retained for exporter API compatibility.
+    tree = etree.ElementTree(_EditorXmlExporter(graph).build())
+    tree.write(
+        output_file_name,
+        pretty_print=True,
+        xml_declaration=True,
+        encoding="utf-8",
+    )
 
-    xml_waypoint = etree.SubElement(xml_waypoints, "waypoint")
-    xml_waypoint.set("x", str(xcoord[event]+xoffset))
-    xml_waypoint.set("y", str(ycoord[event]+yoffset))
-    xml_waypoint = etree.SubElement(xml_waypoints, "waypoint")
-    xml_waypoint.set("x", str((xcoord[event]+xoffset+xcoord[event_prime]+xprimeoffset)/2))
-    xml_waypoint.set("y", str(ycoord[event]+yoffset))
-    xml_waypoint = etree.SubElement(xml_waypoints, "waypoint")
-    xml_waypoint.set("x", str((xcoord[event]+xoffset+xcoord[event_prime]+xprimeoffset)/2))
-    xml_waypoint.set("y", str(ycoord[event_prime]+yprimeoffset))
-    xml_waypoint = etree.SubElement(xml_waypoints, "waypoint")
-    xml_waypoint.set("x", str(xcoord[event_prime]+xprimeoffset))
-    xml_waypoint.set("y", str(ycoord[event_prime]+yprimeoffset))
+
+def export_as_string(graph: DcrGraph, parameters=None) -> bytes:
+    """Serialize a canonical graph without writing it to the file system."""
+    del parameters
+    return etree.tostring(
+        _EditorXmlExporter(graph).build(),
+        pretty_print=True,
+        xml_declaration=True,
+        encoding="utf-8",
+    )
+
+
+class _EditorXmlExporter:
+    def __init__(self, graph: DcrGraph) -> None:
+        if not isinstance(graph, DcrGraph):
+            raise TypeError("DCR.js export requires an ocdcr.obj.DcrGraph instance.")
+        self.graph = graph
+        self.elements = {
+            element for element in graph.elements
+            if not isinstance(element, DcrSpawnContainer)
+        }
+        self.parents = self._parent_map()
+        self.bounds = {
+            element: element.bounds for element in self.elements if element.bounds
+        }
+        self.relation_ids = {}
+        self._layout_missing_elements()
+
+    def build(self):
+        definitions = etree.Element(
+            etree.QName(DCR_NAMESPACE, "definitions"), nsmap=NSMAP
+        )
+        graph_xml = etree.SubElement(
+            definitions, etree.QName(DCR_NAMESPACE, "dcrGraph"), id=self.graph.ID
+        )
+        for element in sorted(self._roots(), key=lambda item: item.ID):
+            graph_xml.append(self._element_xml(element))
+        for relation in sorted(self.graph.relations, key=self._relation_sort_key):
+            graph_xml.append(self._relation_xml(relation))
+        definitions.append(self._diagram_xml())
+        return definitions
+
+    def _element_xml(self, element):
+        if type(element) is DcrActivity:
+            tag = "event"
+        elif isinstance(element, DcrNesting) and not isinstance(element, DcrSubgraph):
+            tag = "nesting"
+        else:
+            tag = "subProcess"
+        xml = etree.Element(etree.QName(DCR_NAMESPACE, tag), id=element.ID)
+        self._optional_attribute(xml, "label", getattr(element, "label", None))
+        self._optional_attribute(xml, "role", getattr(element, "role", None))
+        self._optional_attribute(
+            xml, "description", getattr(element, "description", None)
+        )
+        if isinstance(element, DcrActivity):
+            xml.set("included", self._boolean(element.included))
+            xml.set("executed", self._boolean(element.executed is not None))
+            xml.set("pending", self._boolean(element.pending))
+        if isinstance(element, DcrSubgraph):
+            xml.set("multi-instance", "true")
+        if type(element) is DcrActivity and element.eventData is not None:
+            data = element.eventData
+            event_data = etree.SubElement(
+                xml,
+                etree.QName(DCR_NAMESPACE, "eventData"),
+                name=data.name,
+                type=data.data_type,
+            )
+            if data.default is not None:
+                event_data.set("default", self._scalar(data.default))
+        if isinstance(element, DcrParentElement):
+            for child in sorted(self._children(element), key=lambda item: item.ID):
+                xml.append(self._element_xml(child))
+        return xml
+
+    def _relation_xml(self, relation: DcrRelation):
+        relation_id = self._relation_id(relation)
+        xml = etree.Element(
+            etree.QName(DCR_NAMESPACE, "relation"),
+            id=relation_id,
+            type=RELATION_NAMES[relation.relationType],
+            sourceRef=relation.source.ID,
+            targetRef=relation.target.ID,
+        )
+        if relation.guard:
+            xml.set("guard", self._expression(relation.guard, relation))
+        if relation.forAll:
+            xml.set("forAll", "true")
+        if isinstance(relation, DcrSetValue):
+            xml.set("value", self._expression(relation.value, relation))
+        return xml
+
+    def _diagram_xml(self):
+        board = etree.Element(
+            etree.QName(DCR_DI_NAMESPACE, "dcrRootBoard"), id="dcrRootBoard"
+        )
+        plane = etree.SubElement(
+            board,
+            etree.QName(DCR_DI_NAMESPACE, "dcrPlane"),
+            id="dcrPlane",
+            boardElement=self.graph.ID,
+        )
+        for element in sorted(self.elements, key=lambda item: item.ID):
+            shape = etree.SubElement(
+                plane,
+                etree.QName(DCR_DI_NAMESPACE, "dcrShape"),
+                id=f"{element.ID}_id",
+                boardElement=element.ID,
+            )
+            bounds = self.bounds[element]
+            etree.SubElement(
+                shape,
+                etree.QName(DC_NAMESPACE, "Bounds"),
+                x=self._number(bounds.x),
+                y=self._number(bounds.y),
+                width=self._number(bounds.width),
+                height=self._number(bounds.height),
+            )
+        for relation in sorted(self.graph.relations, key=self._relation_sort_key):
+            relation_id = self._relation_id(relation)
+            diagram_relation = etree.SubElement(
+                plane,
+                etree.QName(DCR_DI_NAMESPACE, "relation"),
+                id=f"{relation_id}_di",
+                boardElement=relation_id,
+            )
+            waypoints = relation.waypoints or self._route(relation)
+            for point in waypoints:
+                etree.SubElement(
+                    diagram_relation,
+                    etree.QName(DCR_DI_NAMESPACE, "waypoint"),
+                    x=self._number(point.x),
+                    y=self._number(point.y),
+                )
+        return board
+
+    def _parent_map(self):
+        parents = {}
+        for parent in self.graph.elements:
+            if not isinstance(parent, DcrParentElement):
+                continue
+            for child in self._children(parent):
+                if child in self.elements:
+                    parents[child] = parent
+        return parents
+
+    def _roots(self):
+        return {
+            element for element in self.elements
+            if element not in self.parents and not element.isTemplate
+        }
+
+    @staticmethod
+    def _children(parent):
+        children = set()
+        for child in parent.children:
+            if isinstance(child, DcrSpawnContainer):
+                children.update(child.children)
+            else:
+                children.add(child)
+        return children
+
+    def _layout_missing_elements(self):
+        counter = 0
+        for element in sorted(self.elements, key=lambda item: item.ID):
+            if element in self.bounds or isinstance(element, DcrParentElement):
+                continue
+            column, row = counter % 4, counter // 4
+            self.bounds[element] = DcrBounds(
+                50 + column * 300, 50 + row * 220, 130, 150
+            )
+            counter += 1
+        for root in sorted(self._roots(), key=lambda item: item.ID):
+            self._layout_parent(root)
+
+    def _layout_parent(self, element):
+        if not isinstance(element, DcrParentElement):
+            return self.bounds[element]
+        children = sorted(self._children(element), key=lambda item: item.ID)
+        for child in children:
+            self._layout_parent(child)
+        if element not in self.bounds:
+            child_bounds = [self.bounds[child] for child in children]
+            if child_bounds:
+                left = min(bounds.x for bounds in child_bounds) - 30
+                top = min(bounds.y for bounds in child_bounds) - 30
+                right = max(bounds.x + bounds.width for bounds in child_bounds) + 30
+                bottom = max(bounds.y + bounds.height for bounds in child_bounds) + 30
+                self.bounds[element] = DcrBounds(
+                    left, top, right - left, bottom - top
+                )
+            else:
+                self.bounds[element] = DcrBounds(50, 50, 190, 210)
+        return self.bounds[element]
+
+    def _route(self, relation):
+        source = self.bounds[relation.source]
+        target = self.bounds[relation.target]
+        if relation.source == relation.target:
+            middle = source.x + source.width / 2
+            bottom = source.y + source.height
+            return [
+                DcrPoint(middle, bottom),
+                DcrPoint(middle, bottom + 25),
+                DcrPoint(source.x - 25, bottom + 25),
+                DcrPoint(source.x - 25, source.y + source.height / 2),
+                DcrPoint(source.x, source.y + source.height / 2),
+            ]
+        start = DcrPoint(
+            source.x + source.width, source.y + source.height / 2
+        )
+        end = DcrPoint(target.x, target.y + target.height / 2)
+        middle = (start.x + end.x) / 2
+        return [start, DcrPoint(middle, start.y), DcrPoint(middle, end.y), end]
+
+    def _expression(self, computation, relation):
+        tokens = []
+        for token in computation:
+            if isinstance(token, tuple):
+                element_id, attribute = token
+                if element_id == "source":
+                    element_id = relation.source.ID
+                elif element_id == "target":
+                    element_id = relation.target.ID
+                element = self.graph.getElementFromID(element_id)
+                if attribute != "data" or not isinstance(element, DcrActivity):
+                    raise ValueError(f"Unsupported DCR expression reference: {token!r}.")
+                if element.eventData is None:
+                    raise ValueError(
+                        f"Activity {element.ID!r} has no event-data variable."
+                    )
+                tokens.append(element.eventData.name)
+            elif isinstance(token, bool):
+                tokens.append(self._boolean(token))
+            else:
+                tokens.append(str(token))
+        return " ".join(tokens)
+
+    def _relation_id(self, relation):
+        if relation in self.relation_ids:
+            return self.relation_ids[relation]
+        base = relation.ID or (
+            f"{relation.source.ID}{relation.target.ID}"
+            f"{RELATION_NAMES[relation.relationType]}"
+        )
+        used = set(self.relation_ids.values())
+        candidate, suffix = base, 2
+        while candidate in used:
+            candidate = f"{base}_{suffix}"
+            suffix += 1
+        self.relation_ids[relation] = candidate
+        return candidate
+
+    @staticmethod
+    def _relation_sort_key(relation):
+        return (
+            relation.source.ID,
+            relation.target.ID,
+            int(relation.relationType),
+            relation.ID or "",
+        )
+
+    @staticmethod
+    def _optional_attribute(element, name, value):
+        if value is not None:
+            element.set(name, str(value))
+
+    @staticmethod
+    def _boolean(value):
+        return "true" if value else "false"
+
+    @classmethod
+    def _scalar(cls, value):
+        return cls._boolean(value) if isinstance(value, bool) else str(value)
+
+    @staticmethod
+    def _number(value):
+        return str(int(value)) if float(value).is_integer() else str(value)

@@ -2,6 +2,34 @@ from enum import IntEnum, auto
 from typing import Set, Dict, Callable
 from datetime import datetime
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class DcrEventData:
+    """Editor metadata for an activity's data variable."""
+
+    name: str
+    data_type: str
+    default: object = None
+
+
+@dataclass(frozen=True)
+class DcrBounds:
+    """Diagram bounds retained during editor XML round trips."""
+
+    x: float
+    y: float
+    width: float
+    height: float
+
+
+@dataclass(frozen=True)
+class DcrPoint:
+    """A relation waypoint in the editor diagram."""
+
+    x: float
+    y: float
 
 
 # Order of enum allows for easily sorting effects for correct order of execution
@@ -17,10 +45,11 @@ class RelationType(IntEnum):
 
 class DcrExecution:
     
-    def __init__(self, activityID, input=None, time=None):
+    def __init__(self, activityID, input=None, time=None, role=None):
         self.__activityID = activityID
         self.__input = input
         self.__time = time
+        self.__role = role
 
 
     @property
@@ -38,6 +67,10 @@ class DcrExecution:
     @time.setter
     def time(self, value: datetime):
         self.__time = value
+
+    @property
+    def role(self) -> str | None:
+        return self.__role
     
 
 type DcrExpression = str | int | float | tuple[str, str]
@@ -49,6 +82,7 @@ class DcrElement(ABC):
         self.__id = id
         self.__parentsIncluded = True if template is None else template.parentsIncluded
         self.__isTemplate = False
+        self.__bounds = None if template is None else template.bounds
 
     @property
     def ID(self) -> str:
@@ -84,6 +118,14 @@ class DcrElement(ABC):
     def isTemplate(self, value: bool):
         self.__isTemplate = value
 
+    @property
+    def bounds(self) -> DcrBounds | None:
+        return self.__bounds
+
+    @bounds.setter
+    def bounds(self, value: DcrBounds | None):
+        self.__bounds = value
+
     def __hash__(self) -> int:
         return hash(self.ID)
     
@@ -96,15 +138,58 @@ class DcrElement(ABC):
 
 class DcrActivity(DcrElement):
     
-    def __init__(self, id, label=None, included=True, pending=False, computation: DcrComputation=None, takesInput=False, template=None, **kwargs):
+    def __init__(self, id, 
+                 label=None,
+                 role=None,
+                 description=None, 
+                 included=True, 
+                 pending=False, 
+                 computation: DcrComputation=None, 
+                 takesInput=False, 
+                 eventData: DcrEventData=None,
+                 template=None, **kwargs):
         super().__init__(id, template=template, **kwargs)
-        self.__label = id if label is None else label
+        self.__label = (id if label is None else label) if template is None else template.label
+        self.__description = description if template is None else template.description
         self.__included = included if template is None else template.included
         self.__pending = pending if template is None else template.pending
-        self.__executed = None # set as None or a datetime denoting execution time. Not currently used but for compatability with timed graphs.
+        self.__executed = None # set as None or a datetime denoting execution time. 
+        # Not currently used but for compatability with timed graphs.
         self.__computation = computation if template is None else template.computation
         self.__takesInput = takesInput if template is None else template.takesInput
-        self.__data = None
+        self.__role = role if template is None else template.role
+        self.__eventData = eventData if template is None else template.eventData
+        self.__data = self.__eventData.default if self.__eventData is not None else None
+        self.__tool_call = lambda x : x
+
+    @property
+    def tool_call(self, *args, **kwargs) -> any:
+        if args:
+            return self.__tool_call(args)
+        elif kwargs:
+            return self.__tool_call(kwargs)
+        else:
+            return self.__tool_call
+    
+    @tool_call.setter
+    def tool_call(self, value):
+        self.__tool_call = value
+
+    @property
+    def description(self) -> str:
+        return self.__description
+    
+    @description.setter
+    def description(self, value: str):
+        self.__description = value
+
+    @property
+    def role(self) -> str:
+        return self.__role
+    
+    @role.setter
+    def role(self, value: str):
+        self.__role = value
 
     @property
     def label(self) -> str:
@@ -154,6 +239,19 @@ class DcrActivity(DcrElement):
     def takesInput(self) -> bool:
         return self.__takesInput
 
+    @takesInput.setter
+    def takesInput(self, value: bool):
+        self.__takesInput = value
+
+    @property
+    def eventData(self) -> DcrEventData | None:
+        return self.__eventData
+
+    @eventData.setter
+    def eventData(self, value: DcrEventData | None):
+        self.__eventData = value
+        self.__takesInput = value is not None
+
     @property
     def data(self) -> any:
         return self.__data
@@ -171,6 +269,9 @@ class DcrParentElement(DcrElement):
         super().__init__(id, template)
         self.__children = set() if children is None else children
         self.__childrenPending = False if template is None else template.childrenPending
+        self.__label = id if template is None else template.label
+        self.__description = None if template is None else template.description
+        self.__role = None if template is None else template.role
 
     @property
     def children(self) -> Set[DcrElement]:
@@ -187,6 +288,30 @@ class DcrParentElement(DcrElement):
     @childrenPending.setter
     def childrenPending(self, value: bool):
         self.__childrenPending = value
+
+    @property
+    def label(self) -> str:
+        return self.__label
+
+    @label.setter
+    def label(self, value: str):
+        self.__label = value
+
+    @property
+    def description(self) -> str | None:
+        return self.__description
+
+    @description.setter
+    def description(self, value: str | None):
+        self.__description = value
+
+    @property
+    def role(self) -> str | None:
+        return self.__role
+
+    @role.setter
+    def role(self, value: str | None):
+        self.__role = value
 
     @property
     def effectivePending(self) -> bool:
@@ -235,6 +360,8 @@ class DcrRelation:
         self.__target = target
         self.__guard = guard
         self.__forAll = forAll
+        self.__id = None
+        self.__waypoints = []
 
     @property
     def relationType(self) -> RelationType:
@@ -275,6 +402,22 @@ class DcrRelation:
     @forAll.setter
     def forAll(self, value: bool):
         self.__forAll = value
+
+    @property
+    def ID(self) -> str | None:
+        return self.__id
+
+    @ID.setter
+    def ID(self, value: str | None):
+        self.__id = value
+
+    @property
+    def waypoints(self) -> list[DcrPoint]:
+        return self.__waypoints
+
+    @waypoints.setter
+    def waypoints(self, value: list[DcrPoint]):
+        self.__waypoints = value
     
     def __repr__(self):
         return "Relation type: " + str(self.relationType) + ", Source: " + str(self.source) + ", Target: " + str(self.target) + ", Guard: " + str(self.guard)
@@ -542,9 +685,16 @@ class DcrGraph:
 
     def getConstraints(self) -> int:
         return len(self.__relations)
-    
+
     def isAccepting(self) -> bool:
         for e in self.elements:
-            if isinstance(e, DcrActivity) and not self.getSubprocessParents(e) and e.pending and e.included:
+            if isinstance(e, DcrActivity) and e.pending and e.included:
                 return False
         return True
+
+    # def isAccepting(self) -> bool:
+    #     #Mikkels code
+    #     for e in self.elements:
+    #         if isinstance(e, DcrActivity) and not self.getSubprocessParents(e) and e.pending and e.included:
+    #             return False
+    #     return True

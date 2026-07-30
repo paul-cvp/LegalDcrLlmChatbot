@@ -1,33 +1,55 @@
-"""Base chat interface and deterministic test implementation."""
+"""Base chat interface and deterministic history-enabled implementation."""
 
-from object.domain import ChatHistoryEntry
+from object.domain import ChatHistoryEntry, ChatRequest, ChatResponse
 
 
 class Chat:
-    async def run(self, message: str) -> str:
-        """Return the request unchanged."""
-        return message
+    async def run(self, request: ChatRequest | str) -> ChatResponse:
 
-class ChatWithHistory(Chat):
-    """Decorate a chat approach with ordered request/response history."""
+        normalized_request = self.normalize_request(request)
+
+        return ChatResponse(text=normalized_request.text)
+
+    @staticmethod
+    def normalize_request(request: ChatRequest | str) -> ChatRequest:
+        return request if isinstance(request, ChatRequest) else ChatRequest(text=request)
+
+
+class ChatWithHistory:
+    """Store successful request/response pairs in insertion order."""
 
     def __init__(self) -> None:
-        self._history = []
+        self._history: list[ChatHistoryEntry] = []
 
     @property
     def history(self) -> list[ChatHistoryEntry]:
         return self._history
 
-    async def run(self, message: str) -> str:
-        response = await super().run(message)
-        self.record_response(message, response)
+    async def run(self, request: ChatRequest | str) -> ChatResponse:
+        normalized_request = self.normalize_request(request)
+
+        response = ChatResponse(text=normalized_request.text)
+
+        self.record_response(item=normalized_request, chat_role="user")
+        self.record_response(item=response, chat_role="assistant")
         return response
 
-    def record_response(self, request: str, response: str) -> None:
-        self._history.append(ChatHistoryEntry(request=request, response=response))
+    def record_response(
+        self,
+        item: str,
+        chat_role: str,
+        dcr_role: str = None
+    ) -> None:
+        self._history.append(
+            ChatHistoryEntry(item=item, chat_role=chat_role, dcr_role=dcr_role)
+        )
 
     def get_history(self) -> list[ChatHistoryEntry]:
         return list(self._history)
 
     def clear_history(self) -> None:
         self._history.clear()
+
+    @staticmethod
+    def normalize_request(request: ChatRequest | str) -> ChatRequest:
+        return request if isinstance(request, ChatRequest) else ChatRequest(text=request)

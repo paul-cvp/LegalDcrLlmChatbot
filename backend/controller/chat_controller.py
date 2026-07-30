@@ -1,29 +1,34 @@
-"""Select and execute the configured chat approach."""
+"""Manage in-memory chat sessions and their configured approaches."""
 
 from collections.abc import Callable
+from uuid import UUID, uuid4
 
-from approaches.chat_interface import Chat, ChatWithHistory
+from approaches.chat_interface import ChatWithHistory
 from approaches.dcr_chat import DcrChat
 from approaches.llm_chat import LLMChat
 from approaches.llm_dcr_controller import LLMDcrControllerChat
 from object.domain import (
+    ChatHistoryEntry,
     ChatOption,
-    ChatRequest,
-    ChatResponse,
+    ChatSessionRequest,
+    ChatSessionResponse,
     ChatType,
+    DcrChatRequest,
+    DcrChatResponse,
 )
+from object.errors import NotFoundError
 
 
 class ChatController:
-    APPROACHES: dict[ChatType, Callable[[], Chat]] = {
+    APPROACHES: dict[ChatType, Callable[[], ChatWithHistory]] = {
         ChatType.TEST_CHAT: ChatWithHistory,
         ChatType.LLM_CHAT: LLMChat,
         ChatType.DCR_CHAT: DcrChat,
         ChatType.DCR_CONTROLLER_CHAT: LLMDcrControllerChat,
     }
 
-    def __init__(self, chat_type: ChatType = ChatType.TEST_CHAT) -> None:
-        self.select_approach(chat_type)
+    def __init__(self) -> None:
+        self._sessions: dict[UUID, ChatWithHistory] = {}
 
     @staticmethod
     def available_approaches() -> list[ChatOption]:
@@ -32,29 +37,56 @@ class ChatController:
             for chat_type in ChatType
         ]
 
-    def selected_approach(self) -> ChatOption:
-        return ChatOption(name=self.chat_type.name, value=self.chat_type)
+    def get_history(self, session_id: UUID) -> list[ChatHistoryEntry]:
+        return self._get_session(session_id).get_history()
 
-    def select_approach(self, chat_type: ChatType) -> ChatOption:
-
-        self.chat_type = chat_type
-        self.chat_approach = self._load_chat_approach(chat_type)
-        return self.selected_approach()
-
-    def get_history(self) -> list:
-        return self.chat_approach.get_history()
-
-    def clear_history(self) -> None:
-        self.chat_approach.clear_history()
+    def delete_session(self, session_id: UUID) -> None:
+        if self._sessions.pop(session_id, None) is None:
+            raise NotFoundError("Chat session not found.")
 
     @classmethod
-    def _load_chat_approach(cls, chat_type: ChatType) -> Chat:
-        try:
-            approach = cls.APPROACHES[chat_type]
-        except KeyError as exc:
-            raise ValueError(f"Unsupported chat type: {chat_type}") from exc
-        return approach()
+    def _load_chat_approach(
+        cls, chat_type: ChatType, graph_xml: str | None = None
+    ) -> ChatWithHistory:
+        approach = cls.APPROACHES[chat_type]
+        if ChatType.DCR_CHAT == chat_type:
+            from pm4py.objects.dcr.importer import importer as dcr_importer
+            if graph_xml is None:
+                dcr_graph = dcr_importer.apply(
+                    '/home/vco/Projects2026/DcrController/backend/data/models/Social Service Law 86 Data EN.xml',
+                    variant=dcr_importer.DCR_JS_PORTAL,
+                )
+            else:
+                dcr_graph = dcr_importer.deserialize(
+                    graph_xml, variant=dcr_importer.DCR_JS_PORTAL
+                )
+            return approach(dcr_graph)
+        else:
+            return approach()
 
-    async def create_response(self, request: ChatRequest) -> ChatResponse:
-        chat = self.chat_approach
-        return ChatResponse(text=await chat.run(request.text))
+    def _get_session(self, session_id: UUID) -> ChatWithHistory:
+        try:
+            return self._sessions[session_id]
+        except KeyError as exc:
+            raise NotFoundError("Chat session not found.") from exc
+
+    async def create_response(
+        self, request: ChatSessionRequest|DcrChatRequest
+    ) -> ChatSessionResponse|DcrChatResponse:
+        if request.session_id is not None:
+            session_id = request.session_id
+            chat = self._get_session(session_id)
+        else:
+            session_id = uuid4()
+            assert request.chat_type is not None
+            graph_xml = (
+                request.graph_xml if isinstance(request, DcrChatRequest) else None
+            )
+            chat = self._load_chat_approach(request.chat_type, graph_xml)
+
+        response = await chat.run(request)
+        if request.session_id is None:
+            # Only successful first responses register a session.
+            self._sessions[session_id] = chat
+        response.session_id = session_id
+        return response

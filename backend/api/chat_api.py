@@ -1,15 +1,18 @@
 """HTTP routes for chat requests."""
 
-from fastapi import APIRouter, Response, status
+from fastapi import APIRouter, HTTPException, Response, status
 
 from controller.chat_controller import ChatController
 from object.domain import (
     ChatHistoryEntry,
     ChatOption,
-    ChatRequest,
-    ChatResponse,
-    ChatType,
+    ChatSessionRequest,
+    ChatSessionResponse,
+    DcrChatResponse,
+    DcrChatRequest,
+    SessionRequest,
 )
+from object.errors import NotFoundError
 
 
 router = APIRouter(prefix="/api/chat", tags=["Chat"])
@@ -22,30 +25,26 @@ async def get_chat_approaches() -> list[ChatOption]:
     return controller.available_approaches()
 
 
-@router.get("/approach", response_model=ChatOption)
-async def get_selected_chat_approach() -> ChatOption:
-    return controller.selected_approach()
+@router.post("/history", response_model=list[ChatHistoryEntry])
+async def get_chat_history(request: SessionRequest) -> list[ChatHistoryEntry]:
+    try:
+        return controller.get_history(request.session_id)
+    except NotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
 
 
-@router.post("/approach/{chat_type}", response_model=ChatOption)
-@router.put(
-    "/approach/{chat_type}", response_model=ChatOption, include_in_schema=False
-)
-async def select_chat_approach(chat_type: ChatType) -> ChatOption:
-    return controller.select_approach(chat_type)
-
-
-@router.get("/history", response_model=list[ChatHistoryEntry])
-async def get_chat_history() -> list[ChatHistoryEntry]:
-    return controller.get_history()
-
-
-@router.delete("/history", status_code=status.HTTP_204_NO_CONTENT)
-async def clear_chat_history() -> Response:
-    controller.clear_history()
+@router.delete("/session", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_chat_session(request: SessionRequest) -> Response:
+    try:
+        controller.delete_session(request.session_id)
+    except NotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.post("/response", response_model=ChatResponse)
-async def get_response(request: ChatRequest) -> ChatResponse:
-    return await controller.create_response(request)
+@router.post("/response", response_model=ChatSessionResponse|DcrChatResponse)
+async def get_response(request: ChatSessionRequest|DcrChatRequest) -> ChatSessionResponse|DcrChatResponse:
+    try:
+        return await controller.create_response(request)
+    except NotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error

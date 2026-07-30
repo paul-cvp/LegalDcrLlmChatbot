@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import IntEnum
+from uuid import UUID
+from pm4py.objects.dcr.ocdcr.obj import DcrGraph
 
-from pydantic import BaseModel, Field
+from pydantic import AliasChoices, BaseModel, Field, model_validator
 
 
 class DCRGraphHolder(BaseModel):
@@ -39,9 +41,37 @@ class ChatResponse(BaseModel):
     text: str = Field(min_length=1)
 
 
+class ChatSessionRequest(ChatRequest):
+    session_id: UUID | None = None
+
+    @model_validator(mode="after")
+    def validate_session_fields(self) -> ChatSessionRequest:
+        if (self.chat_type is None) == (self.session_id is None):
+            raise ValueError("Provide either chat_type or session_id, but not both.")
+        return self
+
+
+class SessionRequest(BaseModel):
+    session_id: UUID | None = None
+
+
+class ChatSessionResponse(ChatResponse):
+    session_id: UUID | None = None
+
+
+class DcrChatRequest(ChatSessionRequest):
+    graph_xml: str | None = None
+    act_id: str | None = None
+
+
+class DcrChatResponse(ChatSessionResponse):
+    graph_xml: str | None = None
+    act_id: str | None = None
+
 class ChatHistoryEntry(BaseModel):
-    request: str
-    response: str
+    item: str
+    chat_role: str
+    dcr_role: str | None = None
 
 
 class ChatOption(BaseModel):
@@ -49,25 +79,12 @@ class ChatOption(BaseModel):
     value: ChatType
 
 
-class LLMChatRequest(BaseModel):
-    input: str = Field(min_length=1)
-
-
-class LLMChatResponse(BaseModel):
-    text: str = Field(min_length=1)
-
-
-class DcrChatRequest(ChatRequest):
-    graph: DCRGraphHolder
-
-
-class DcrChatResponse(ChatResponse):
-    graph: DCRGraphHolder
-
-
-class HealthResponse(BaseModel):
-    status: str
-
+class LLMChatRequest(ChatRequest):
+    text: str = Field(
+        min_length=1,
+        validation_alias=AliasChoices("text", "input"),
+    )
+    instructions: str | None = None
 
 @dataclass(frozen=True)
 class LLMSettings:

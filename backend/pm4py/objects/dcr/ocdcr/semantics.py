@@ -4,7 +4,7 @@ from keyword import iskeyword
 import re
 
 
-from obj import DcrGraph, DcrElement, DcrParentElement, DcrNesting, DcrSubprocess, DcrSubgraph, DcrSpawnContainer, DcrActivity, DcrRelation, DcrEffect, DcrSpawn, DcrConstraint, RelationType, DcrExpression, DcrComputation, DcrExecution
+from pm4py.objects.dcr.ocdcr.obj import DcrGraph, DcrElement, DcrParentElement, DcrNesting, DcrSubprocess, DcrSubgraph, DcrSpawnContainer, DcrActivity, DcrRelation, DcrEffect, DcrSpawn, DcrConstraint, RelationType, DcrExpression, DcrComputation, DcrExecution
 
 
 class DcrSemantics:
@@ -39,8 +39,15 @@ class DcrSemantics:
         return constraints
     
     @classmethod
-    def isEnabled(cls, element: DcrActivity | DcrSubprocess, graph: DcrGraph) -> bool:
+    def isEnabled(
+        cls,
+        element: DcrActivity | DcrSubprocess,
+        graph: DcrGraph,
+        role: str = None,
+    ) -> bool:
         if not isinstance(element, DcrActivity):
+            return False
+        if not cls.isAuthorized(element, role):
             return False
         if not element.effectiveIncluded:
             return False
@@ -51,6 +58,30 @@ class DcrSemantics:
             if not cls.constraintPasses(r.source, element, r, graph):
                 return False
         return True
+
+    @staticmethod
+    def isAuthorized(element: DcrActivity, role: str = None) -> bool:
+        """Check an explicit actor role; no role denotes trusted system execution."""
+        if role is None or not element.role:
+            return True
+        assigned_roles = {
+            assigned.strip()
+            for assigned in element.role.split(",")
+            if assigned.strip()
+        }
+        return role in assigned_roles
+
+    @classmethod
+    def getEnabledActivities(
+        cls, graph: DcrGraph, role: str = None
+    ) -> Set[DcrActivity]:
+        """Return activities enabled for the supplied actor role."""
+        return {
+            element
+            for element in graph.elements
+            if isinstance(element, DcrActivity)
+            and cls.isEnabled(element, graph, role)
+        }
     
     @classmethod
     def constraintPasses(cls, source: DcrElement, target: DcrElement, constraint: DcrConstraint, graph: DcrGraph) -> bool:
@@ -116,10 +147,10 @@ class DcrSemantics:
     
     @classmethod
     def evaluateComputation(cls, computation: DcrComputation, graph: DcrGraph, source: DcrElement=None, target: DcrElement=None) -> any:
-    # Unaccessed parameters may be used for evaluation of final string.
-        for i, expression in enumerate(computation):
-            computation[i] = cls.parseExpression(expression)
-        executable = " ".join(computation)
+        # Compile a temporary expression so retained XML guard tokens stay intact.
+        executable = " ".join(
+            cls.parseExpression(expression) for expression in computation
+        )
         try:
             res = eval(executable)
         except:
@@ -129,7 +160,13 @@ class DcrSemantics:
     @classmethod
     def executeActivity(cls, execution: DcrExecution, graph: DcrGraph):
         activity = graph.getActivity(execution.activityID)
-        if cls.isEnabled(activity, graph):
+        if not cls.isAuthorized(activity, execution.role):
+            raise PermissionError(
+                "Role {!r} is not authorized to execute activity {}".format(
+                    execution.role, activity.ID
+                )
+            )
+        if cls.isEnabled(activity, graph, execution.role):
             if execution.time is None:
                 execution.time = datetime.now()
             graph.executions.append(execution)

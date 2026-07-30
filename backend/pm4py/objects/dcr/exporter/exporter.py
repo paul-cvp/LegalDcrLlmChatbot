@@ -40,3 +40,10 @@ def apply(dcr_graph, path, variant=XML_SIMPLE, **parameters):
         xml_simple.export_dcr_xml(dcr_graph, output_file_name=path, **parameters)
     elif variant is Variants.DCR_JS_PORTAL:
         dcr_js_portal.export_dcr_xml(dcr_graph, output_file_name=path, **parameters)
+
+
+def serialize(dcr_graph, variant=DCR_JS_PORTAL, parameters=None):
+    """Serialize a DCR graph in memory and return its XML bytes."""
+    if variant is not Variants.DCR_JS_PORTAL:
+        raise ValueError("In-memory serialization supports DCR_JS_PORTAL only.")
+    return dcr_js_portal.export_as_string(dcr_graph, parameters=parameters)
