@@ -1,0 +1,15 @@
+Question:
+{{ query }}
+
+Retrieved legal sources:
+{% if sources %}
+{% for source in sources %}
+[{{ source.source }}#page={{ source.page_number + 1 }}]
+{{ source.text }}
+
+{% endfor %}
+{% else %}
+No legal source excerpts were retrieved.
+{% endif %}
+
+Answer the question using only these sources.

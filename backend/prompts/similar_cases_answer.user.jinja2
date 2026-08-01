@@ -1,0 +1,36 @@
+Current case or question:
+{{ query }}
+
+Closest cases overall:
+{% if closest %}
+{% for case in closest %}
+[{{ case.source }}] Outcome: {{ case.outcome.value }}
+{{ case.text }}
+
+{% endfor %}
+{% else %}
+No similar cases were retrieved.
+{% endif %}
+
+Positive-outcome cluster:
+{% for case in clusters.positive %}
+[{{ case.source }}] {{ case.text }}
+{% else %}
+No positive-outcome cases were retrieved.
+{% endfor %}
+
+Negative-outcome cluster:
+{% for case in clusters.negative %}
+[{{ case.source }}] {{ case.text }}
+{% else %}
+No negative-outcome cases were retrieved.
+{% endfor %}
+
+Unknown-outcome cluster:
+{% for case in clusters.unknown %}
+[{{ case.source }}] {{ case.text }}
+{% else %}
+No unknown-outcome cases were retrieved.
+{% endfor %}
+
+Compare the current case with both the closest cases and the outcome clusters.

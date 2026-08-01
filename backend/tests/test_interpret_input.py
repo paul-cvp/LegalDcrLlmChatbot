@@ -53,6 +53,7 @@ def test_interpret_input_uses_structured_wrapper_model(
     assert type(result) is data_type
     assert client.responses.arguments["text_format"] is response_model
     assert client.responses.arguments["model"] == "test-model"
+    assert data_type.__name__ in client.responses.arguments["input"]
 
 
 def test_interpret_input_rejects_unsupported_type():

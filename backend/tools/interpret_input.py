@@ -2,8 +2,14 @@ from pydantic import BaseModel
 
 from tools.llm import LlmTool
 
+'''
+#TODO A few more details about the dcr graph are required perhaps, such as execution semantics,
+notions about todays date and the trace, case history with past events that happened in the case.
+'''
 INSTRUCTIONS = """
-Interpret the input text and match it to the closest value given the python data type
+Interpret the user's answer as the requested Python data type. Preserve the user's
+meaning, do not add facts, and return only the structured value requested by the
+response schema.
 """
 
 
@@ -27,10 +33,9 @@ RESPONSE_MODELS = {
 
 
 class InterpretInput(LlmTool):
-    '''
-    Use the extra data related necessary input from the dcr graph together with outlines to interpret the input that should be asked to the user
-    '''
-    def __init__(self, settings=None, client=None):
+    """Convert natural-language user input into a declared DCR data type."""
+
+    def __init__(self, settings=None, client=None) -> None:
         super().__init__(instructions=INSTRUCTIONS, settings=settings, client=client)
 
     async def get_closest_match(self, input_text, data_type):
@@ -41,8 +46,13 @@ class InterpretInput(LlmTool):
         response = await self.client.responses.parse(
             model=self.settings.deployment_name,
             instructions=self.instructions,
-            input=input_text,
+            input=(
+                f"Expected Python type: {data_type.__name__}\n"
+                f"User answer: {input_text}"
+            ),
             text_format=response_model,
         )
-
-        return response.output_parsed.value
+        parsed = getattr(response, "output_parsed", None)
+        if parsed is None:
+            raise RuntimeError("The language model returned no structured value.")
+        return parsed.value

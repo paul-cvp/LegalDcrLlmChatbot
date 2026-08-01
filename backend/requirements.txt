@@ -22,5 +22,6 @@ httpx
 pytest
 openai
 python-dotenv
+jinja2
 sentence-transformers
 pypdf

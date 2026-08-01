@@ -1,0 +1,32 @@
+Current case chat history:
+{% for entry in history %}
+- {{ entry }}
+{% else %}
+- No chat history supplied.
+{% endfor %}
+
+Current case activity trace:
+{% for execution in trace %}
+- {{ execution }}
+{% else %}
+- No activity trace supplied.
+{% endfor %}
+
+Retrieved legal sources:
+{% for source in legal_facts %}
+- [{{ source.source }}#page={{ source.page_number + 1 }}] {{ source.text }}
+{% else %}
+- No legal excerpts supplied.
+{% endfor %}
+
+Retrieved similar cases:
+{% for case in similar_cases %}
+- [{{ case.source }}] Outcome: {{ case.outcome.value }}. {{ case.text }}
+{% else %}
+- No similar cases supplied.
+{% endfor %}
+
+DCR process model:
+{{ dcr_xml }}
+
+Produce the neutral case summary now.

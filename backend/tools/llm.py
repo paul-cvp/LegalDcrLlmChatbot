@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
+from jinja2 import Environment, FileSystemLoader, StrictUndefined
 from openai import AsyncOpenAI
 
 from object.domain import (
@@ -21,6 +22,7 @@ from object.domain import (
 
 class LlmTool:
     PROJECT_ROOT = Path(__file__).resolve().parents[2]
+    PROMPTS_ROOT = PROJECT_ROOT / "backend" / "prompts"
 
     def __init__(
         self,
@@ -30,10 +32,39 @@ class LlmTool:
     ) -> None:
         self.settings = settings or self._load_settings()
         self.client = client or AsyncOpenAI(
-                base_url=self.settings.endpoint,
-                api_key=self.settings.api_key,
-            )
+            base_url=self.settings.endpoint,
+            api_key=self.settings.api_key,
+        )
         self.instructions = instructions
+        self._prompts = Environment(
+            loader=FileSystemLoader(self.PROMPTS_ROOT),
+            undefined=StrictUndefined,
+            autoescape=False,
+            trim_blocks=True,
+            lstrip_blocks=True,
+        )
+
+    def render_template(self, template_name: str, **context: Any) -> str:
+        """Render a prompt and fail clearly when required context is missing."""
+        return self._prompts.get_template(template_name).render(**context).strip()
+
+    async def complete_from_templates(
+        self,
+        system_template: str,
+        user_template: str,
+        *,
+        system_context: dict[str, Any] | None = None,
+        user_context: dict[str, Any] | None = None,
+    ) -> str:
+        """Render a system/user prompt pair and return the generated text."""
+        instructions = self.render_template(
+            system_template, **(system_context or {})
+        )
+        input_text = self.render_template(user_template, **(user_context or {}))
+        response = await self.request(
+            LLMChatRequest(text=input_text, instructions=instructions)
+        )
+        return self.response_text(response)
 
     async def request(
         self,
@@ -44,12 +75,8 @@ class LlmTool:
         conversation = []
         if history:
             for entry in history:
-                conversation.extend(
-                    [
-                        {"role": "user", "content": entry.request},
-                        {"role": "assistant", "content": entry.response},
-                    ]
-                )
+                role = "assistant" if entry.chat_role == "assistant" else "user"
+                conversation.append({"role": role, "content": entry.item})
             conversation.append({"role": "user", "content": input_request.text})
 
         request_arguments = {
@@ -82,7 +109,15 @@ class LlmTool:
             if response_factory is not None
             else await self.request(input_request, history)
         )
-        return ChatResponse(text=response.output_text)
+        return ChatResponse(text=self.response_text(response))
+
+    @staticmethod
+    def response_text(response: Any) -> str:
+        """Extract non-empty text from an OpenAI Responses API result."""
+        text = getattr(response, "output_text", None)
+        if not isinstance(text, str) or not text.strip():
+            raise RuntimeError("The language model returned no text output.")
+        return text.strip()
 
     def _load_settings(self) -> LLMSettings:
         load_dotenv(self.PROJECT_ROOT / ".env")
