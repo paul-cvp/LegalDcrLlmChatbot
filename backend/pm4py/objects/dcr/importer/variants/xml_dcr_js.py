@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import math
 import re
 from datetime import datetime
 
@@ -53,6 +54,7 @@ def import_from_string(dcr_string, parameters=None) -> DcrGraph:
 
 
 class _EditorXmlImporter:
+    DATA_TYPES = {"Bool": bool, "Int": int, "String": str}
     ELEMENT_TYPES = {
         "condition": (DcrConstraint, RelationType.C),
         "milestone": (DcrConstraint, RelationType.M),
@@ -85,6 +87,8 @@ class _EditorXmlImporter:
         }
         return DcrGraph(
             graph_element.get("id"),
+            graph_element.get("title"),
+            graph_element.get("description"),
             executions=[],
             elements=self.elements,
             relations=relations,
@@ -124,6 +128,7 @@ class _EditorXmlImporter:
                 element_id,
                 role=element.get("role"),
                 description=description,
+                priority=self._priority(element),
                 label=element_id if label is None else label,
                 included=self._boolean(element, "included", True),
                 pending=self._boolean(element, "pending", False),
@@ -166,14 +171,11 @@ class _EditorXmlImporter:
         if not name or name in self.variables:
             raise ValueError(f"Missing or duplicate event variable name: {name!r}.")
         value_type = event_data.get("type")
-        if value_type not in {"Bool", "Int", "String"}:
+        if value_type not in self.DATA_TYPES:
             raise ValueError(f"Unsupported event data type: {value_type!r}.")
         self.variables[name] = element.get("id")
         default = event_data.get("default")
-        parsed_default = (
-            self._default_value(default, value_type) if default is not None else None
-        )
-        return DcrEventData(name, value_type, parsed_default)
+        return DcrEventData(name, self.DATA_TYPES[value_type], default)
 
     def _parse_relation(self, element):
         relation_type = (element.get("type") or "").lower()
@@ -271,14 +273,19 @@ class _EditorXmlImporter:
             raise ValueError(f"Invalid diagram {attribute} coordinate: {value!r}.") from exc
 
     @staticmethod
+    def _priority(element):
+        value = element.get("priority")
+        if value is None:
+            return None
+        try:
+            priority = float(value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"Invalid activity priority: {value!r}.") from exc
+        if not math.isfinite(priority):
+            raise ValueError(f"Invalid activity priority: {value!r}.")
+        return priority
+
+    @staticmethod
     def _boolean(element, attribute, default):
         value = element.get(attribute)
         return default if value is None else value.lower() == "true"
-
-    @staticmethod
-    def _default_value(value, value_type):
-        if value_type == "Int":
-            return int(value)
-        if value_type == "Bool":
-            return value.lower() == "true"
-        return value

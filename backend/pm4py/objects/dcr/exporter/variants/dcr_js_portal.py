@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 from lxml import etree
 
 from pm4py.objects.dcr.ocdcr.obj import (
@@ -34,6 +36,8 @@ RELATION_NAMES = {
     RelationType.C: "condition",
     RelationType.M: "milestone",
 }
+
+XML_DATA_TYPES = {bool: "Bool", int: "Int", str: "String"}
 
 
 def export_dcr_xml(
@@ -73,9 +77,15 @@ class _EditorXmlExporter:
             element for element in graph.elements
             if not isinstance(element, DcrSpawnContainer)
         }
+        self.element_ids = self._build_element_ids()
         self.parents = self._parent_map()
         self.bounds = {
             element: element.bounds for element in self.elements if element.bounds
+        }
+        self.reserved_relation_ids = {
+            relation.ID
+            for relation in graph.relations
+            if relation.ID and relation.ID.startswith("Relation_")
         }
         self.relation_ids = {}
         self._layout_missing_elements()
@@ -86,6 +96,10 @@ class _EditorXmlExporter:
         )
         graph_xml = etree.SubElement(
             definitions, etree.QName(DCR_NAMESPACE, "dcrGraph"), id=self.graph.ID
+        )
+        self._optional_attribute(graph_xml, "title", self.graph.title)
+        self._optional_attribute(
+            graph_xml, "description", self.graph.description
         )
         for element in sorted(self._roots(), key=lambda item: item.ID):
             graph_xml.append(self._element_xml(element))
@@ -101,13 +115,18 @@ class _EditorXmlExporter:
             tag = "nesting"
         else:
             tag = "subProcess"
-        xml = etree.Element(etree.QName(DCR_NAMESPACE, tag), id=element.ID)
+        xml = etree.Element(
+            etree.QName(DCR_NAMESPACE, tag), id=self.element_ids[element]
+        )
         self._optional_attribute(xml, "label", getattr(element, "label", None))
         self._optional_attribute(xml, "role", getattr(element, "role", None))
         self._optional_attribute(
             xml, "description", getattr(element, "description", None)
         )
         if isinstance(element, DcrActivity):
+            priority = getattr(element, "priority", None)
+            if priority is not None:
+                xml.set("priority", self._priority(priority))
             xml.set("included", self._boolean(element.included))
             xml.set("executed", self._boolean(element.executed is not None))
             xml.set("pending", self._boolean(element.pending))
@@ -119,7 +138,7 @@ class _EditorXmlExporter:
                 xml,
                 etree.QName(DCR_NAMESPACE, "eventData"),
                 name=data.name,
-                type=data.data_type,
+                type=XML_DATA_TYPES[data.data_type],
             )
             if data.default is not None:
                 event_data.set("default", self._scalar(data.default))
@@ -134,8 +153,8 @@ class _EditorXmlExporter:
             etree.QName(DCR_NAMESPACE, "relation"),
             id=relation_id,
             type=RELATION_NAMES[relation.relationType],
-            sourceRef=relation.source.ID,
-            targetRef=relation.target.ID,
+            sourceRef=self.element_ids[relation.source],
+            targetRef=self.element_ids[relation.target],
         )
         if relation.guard:
             xml.set("guard", self._expression(relation.guard, relation))
@@ -159,8 +178,8 @@ class _EditorXmlExporter:
             shape = etree.SubElement(
                 plane,
                 etree.QName(DCR_DI_NAMESPACE, "dcrShape"),
-                id=f"{element.ID}_id",
-                boardElement=element.ID,
+                id=f"{self.element_ids[element]}_id",
+                boardElement=self.element_ids[element],
             )
             bounds = self.bounds[element]
             etree.SubElement(
@@ -295,16 +314,48 @@ class _EditorXmlExporter:
         if relation in self.relation_ids:
             return self.relation_ids[relation]
         base = relation.ID or (
-            f"{relation.source.ID}{relation.target.ID}"
+            f"{self.element_ids[relation.source]}"
+            f"{self.element_ids[relation.target]}"
             f"{RELATION_NAMES[relation.relationType]}"
         )
-        used = set(self.relation_ids.values())
+        if not base.startswith("Relation_"):
+            base = f"Relation_{base}"
+        used = set(self.relation_ids.values()) | (
+            self.reserved_relation_ids - {relation.ID}
+        )
         candidate, suffix = base, 2
         while candidate in used:
             candidate = f"{base}_{suffix}"
             suffix += 1
         self.relation_ids[relation] = candidate
         return candidate
+
+    def _build_element_ids(self):
+        element_ids = {}
+        used = {}
+        for element in sorted(self.elements, key=lambda item: item.ID):
+            prefix = self._element_prefix(element)
+            element_id = (
+                element.ID
+                if element.ID.startswith(prefix)
+                else f"{prefix}{element.ID}"
+            )
+            if element_id in used:
+                raise ValueError(
+                    f"DCR element IDs {used[element_id]!r} and {element.ID!r} "
+                    f"both export as {element_id!r}."
+                )
+            element_ids[element] = element_id
+            used[element_id] = element.ID
+        return element_ids
+
+    @staticmethod
+    def _element_prefix(element):
+        if type(element) is DcrActivity:
+            return "Event_"
+        if isinstance(element, DcrNesting) and not isinstance(element, DcrSubgraph):
+            return "Nesting_"
+        return "SubProcess_"
 
     @staticmethod
     def _relation_sort_key(relation):
@@ -331,3 +382,13 @@ class _EditorXmlExporter:
     @staticmethod
     def _number(value):
         return str(int(value)) if float(value).is_integer() else str(value)
+
+    @classmethod
+    def _priority(cls, value):
+        try:
+            priority = float(value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"Invalid activity priority: {value!r}.") from exc
+        if not math.isfinite(priority):
+            raise ValueError(f"Invalid activity priority: {value!r}.")
+        return cls._number(priority)

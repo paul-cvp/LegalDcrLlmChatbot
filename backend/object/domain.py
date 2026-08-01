@@ -33,12 +33,12 @@ class ChatType(IntEnum):
 
 
 class ChatRequest(BaseModel):
-    text: str = Field(min_length=1)
+    text: str|int|bool
     chat_type: ChatType | None = None
 
 
 class ChatResponse(BaseModel):
-    text: str = Field(min_length=1)
+    text: str
 
 
 class ChatSessionRequest(ChatRequest):
@@ -62,11 +62,13 @@ class ChatSessionResponse(ChatResponse):
 class DcrChatRequest(ChatSessionRequest):
     graph_xml: str | None = None
     act_id: str | None = None
+    dcr_role: str | None = None
 
 
 class DcrChatResponse(ChatSessionResponse):
     graph_xml: str | None = None
     act_id: str | None = None
+    dcr_role: str | None = None
 
 class ChatHistoryEntry(BaseModel):
     item: str

@@ -22,3 +22,5 @@ httpx
 pytest
 openai
 python-dotenv
+sentence-transformers
+pypdf

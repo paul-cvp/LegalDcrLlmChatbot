@@ -51,15 +51,9 @@ class ChatController:
         approach = cls.APPROACHES[chat_type]
         if ChatType.DCR_CHAT == chat_type:
             from pm4py.objects.dcr.importer import importer as dcr_importer
-            if graph_xml is None:
-                dcr_graph = dcr_importer.apply(
-                    '/home/vco/Projects2026/DcrController/backend/data/models/Social Service Law 86 Data EN.xml',
-                    variant=dcr_importer.DCR_JS_PORTAL,
-                )
-            else:
-                dcr_graph = dcr_importer.deserialize(
-                    graph_xml, variant=dcr_importer.DCR_JS_PORTAL
-                )
+            dcr_graph = dcr_importer.deserialize(
+                graph_xml, variant=dcr_importer.DCR_JS_PORTAL
+            )
             return approach(dcr_graph)
         else:
             return approach()

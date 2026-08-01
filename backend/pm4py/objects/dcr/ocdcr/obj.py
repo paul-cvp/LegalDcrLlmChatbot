@@ -1,5 +1,5 @@
 from enum import IntEnum, auto
-from typing import Set, Dict, Callable
+from typing import ClassVar, Set, Dict, Callable
 from datetime import datetime
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -10,8 +10,44 @@ class DcrEventData:
     """Editor metadata for an activity's data variable."""
 
     name: str
-    data_type: str
+    data_type: type[bool] | type[int] | type[str]
     default: object = None
+
+    TYPE_ALIASES: ClassVar[dict[str, type]] = {
+        "Bool": bool,
+        "Int": int,
+        "String": str,
+    }
+
+    def __post_init__(self) -> None:
+        # Accept legacy XML type names while storing only canonical Python types.
+        data_type = self.TYPE_ALIASES.get(self.data_type, self.data_type)
+        if data_type not in {bool, int, str}:
+            raise ValueError(f"Unsupported DCR event data type: {self.data_type!r}.")
+        object.__setattr__(self, "data_type", data_type)
+        object.__setattr__(self, "default", self.coerce(self.default))
+
+    @property
+    def value_type(self) -> type[bool] | type[int] | type[str]:
+        """Backward-friendly name for the canonical Python value type."""
+        return self.data_type
+
+    def coerce(self, value):
+        """Convert XML or request values to the declared Python type."""
+        if value is None or type(value) is self.data_type:
+            return value
+        if self.data_type is bool and isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {"true", "false"}:
+                return normalized == "true"
+        elif self.data_type is int and isinstance(value, str):
+            try:
+                return int(value)
+            except ValueError:
+                pass
+        raise ValueError(
+            f"Value {value!r} is not valid for {self.data_type.__name__}."
+        )
 
 
 @dataclass(frozen=True)
@@ -141,7 +177,8 @@ class DcrActivity(DcrElement):
     def __init__(self, id, 
                  label=None,
                  role=None,
-                 description=None, 
+                 description=None,
+                 priority=None, 
                  included=True, 
                  pending=False, 
                  computation: DcrComputation=None, 
@@ -151,16 +188,21 @@ class DcrActivity(DcrElement):
         super().__init__(id, template=template, **kwargs)
         self.__label = (id if label is None else label) if template is None else template.label
         self.__description = description if template is None else template.description
+        self.__role = role if template is None else template.role
         self.__included = included if template is None else template.included
         self.__pending = pending if template is None else template.pending
         self.__executed = None # set as None or a datetime denoting execution time. 
         # Not currently used but for compatability with timed graphs.
         self.__computation = computation if template is None else template.computation
-        self.__takesInput = takesInput if template is None else template.takesInput
-        self.__role = role if template is None else template.role
+
+        self.__takesInput = (takesInput or eventData is not None if template is None else template.takesInput)
         self.__eventData = eventData if template is None else template.eventData
         self.__data = self.__eventData.default if self.__eventData is not None else None
+        # if self.__takesInput and not self.__eventData:
+        #     self.__eventData = DcrEventData()
+
         self.__tool_call = lambda x : x
+        self.__priority = priority if template is None else template.priority
 
     @property
     def tool_call(self, *args, **kwargs) -> any:
@@ -182,6 +224,14 @@ class DcrActivity(DcrElement):
     @description.setter
     def description(self, value: str):
         self.__description = value
+
+    @property
+    def priority(self) -> float:
+        return self.__priority
+    
+    @priority.setter
+    def priority(self, value: float):
+        self.__priority = value
 
     @property
     def role(self) -> str:
@@ -258,7 +308,9 @@ class DcrActivity(DcrElement):
     
     @data.setter
     def data(self, value: any):
-        self.__data = value
+        self.__data = (
+            self.__eventData.coerce(value) if self.__eventData is not None else value
+        )
 
 
 class DcrParentElement(DcrElement):
@@ -481,8 +533,10 @@ class DcrConstraint(DcrRelation):
 
 class DcrGraph:
     
-    def __init__(self, id, executions=[], elements=set(), relations=set(), template=None):
+    def __init__(self, id,title="",description="", executions=[], elements=set(), relations=set(), template=None):
         self.__id = id
+        self.__title = title
+        self.__description = description
         self.__elements = elements if template is None else template.elements
         self.__relations = relations if template is None else template.relations
         self.__executions = executions if template is None else template.executions
@@ -498,6 +552,22 @@ class DcrGraph:
     @ID.setter
     def ID(self, value: str):
         self.__id = value
+
+    @property
+    def title(self) -> str:
+        return self.__title
+    
+    @title.setter
+    def title(self, value: str):
+        self.__title = value
+
+    @property
+    def description(self) -> str:
+        return self.__description
+    
+    @description.setter
+    def description(self, value: str):
+        self.__description = value
 
     @property
     def elements(self) -> Set[DcrElement]:

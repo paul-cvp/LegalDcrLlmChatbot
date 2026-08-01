@@ -44,6 +44,9 @@ class ChatWithHistory:
             ChatHistoryEntry(item=item, chat_role=chat_role, dcr_role=dcr_role)
         )
 
+    def get_last_history_entry(self):
+        return self._history[-1]
+
     def get_history(self) -> list[ChatHistoryEntry]:
         return list(self._history)
 
