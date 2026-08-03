@@ -85,7 +85,12 @@ class LlmTool:
         }
         if instruct:
             request_arguments["instructions"] = instruct
-        return await self.client.responses.create(**request_arguments)
+        async with AsyncOpenAI(
+            base_url=self.settings.endpoint,
+            api_key=self.settings.api_key,
+        ) as client:
+            return await client.responses.create(**request_arguments)
+        # return await self.client.responses.create(**request_arguments)
 
     async def request_text(self, input_text: str) -> Any:
         return await self.request(LLMChatRequest(text=input_text))

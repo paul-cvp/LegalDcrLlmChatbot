@@ -184,9 +184,7 @@ class DcrSemantics:
         try:
             res = eval(executable)
         except:
-            print(executable)
             res = exec(executable)
-            # print(res)
         return res
 
     @classmethod
