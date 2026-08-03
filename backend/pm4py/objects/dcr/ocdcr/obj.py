@@ -201,20 +201,15 @@ class DcrActivity(DcrElement):
         # if self.__takesInput and not self.__eventData:
         #     self.__eventData = DcrEventData()
 
-        self.__tool_call = lambda x : x
+        self.__tool_call = lambda x : x if template is None else template.tool_call
         self.__priority = priority if template is None else template.priority
 
     @property
-    def tool_call(self, *args, **kwargs) -> any:
-        if args:
-            return self.__tool_call(args)
-        elif kwargs:
-            return self.__tool_call(kwargs)
-        else:
-            return self.__tool_call
-    
+    def tool_call(self) -> Callable:
+        return self.__tool_call
+
     @tool_call.setter
-    def tool_call(self, value):
+    def tool_call(self, value: Callable):
         self.__tool_call = value
 
     @property
@@ -729,7 +724,7 @@ class DcrGraph:
         for relation in self.relations:
             if isinstance(relation, DcrSpawn) and not isinstance(relation.target, DcrSubgraph | DcrSpawnContainer):
                 raise Exception("Non-subgraph element with ID {} is the target of a spawn relation".format(relation.target.ID))
-            
+        self.executions = []
 
     def getExecutionID(self, activity: DcrActivity) -> str:
         for executionID, dcrActivity in self.activityMap.items():
@@ -762,8 +757,9 @@ class DcrGraph:
                 return False
         return True
 
-    # def isAccepting(self) -> bool:
     #     #Mikkels code
+    #
+    # def isAccepting(self) -> bool:
     #     for e in self.elements:
     #         if isinstance(e, DcrActivity) and not self.getSubprocessParents(e) and e.pending and e.included:
     #             return False

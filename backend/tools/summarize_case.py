@@ -11,21 +11,18 @@ class SummarizeCaseHistory(LlmTool):
 
     async def get_summary(
         self,
-        history: list,
+        data: list,
         trace: list,
-        legal_facts: list,
-        similar_cases: list,
         dcr: DcrGraph,
     ) -> str:
         dcr_xml = util.export_xml(dcr)
+        print("SummarizeCaseHistory")
         return await self.complete_from_templates(
             "summarize_case.system.jinja2",
             "summarize_case.user.jinja2",
             user_context={
-                "history": history,
+                "history": data,
                 "trace": trace,
-                "legal_facts": legal_facts,
-                "similar_cases": similar_cases,
                 "dcr_xml": dcr_xml,
             },
         )

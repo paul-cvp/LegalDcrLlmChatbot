@@ -22,12 +22,14 @@ class FindRelevantLaws:
 
     async def answer(self, query: str, top_k: int = 5) -> str:
         """Answer a legal question using only locally retrieved excerpts."""
+        print("FindRelevantLaws")
         sources = self.find(query, top_k)
-        return await self._language_model.complete_from_templates(
+        res = await self._language_model.complete_from_templates(
             "relevant_laws_answer.system.jinja2",
             "relevant_laws_answer.user.jinja2",
             user_context={"query": query, "sources": sources},
         )
+        return res
 
     @property
     def _language_model(self) -> LlmTool:

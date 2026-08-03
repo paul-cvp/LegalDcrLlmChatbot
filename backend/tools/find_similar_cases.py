@@ -39,9 +39,10 @@ class FindSimilarCases:
         top_k_per_outcome: int = 3,
     ) -> str:
         """Compare the current case with closest and outcome-grouped cases."""
+        print("FindSimilarCases")
         closest = self.find(query, top_k)
         clusters = self.cluster(query, top_k_per_outcome)
-        return await self._language_model.complete_from_templates(
+        res = await self._language_model.complete_from_templates(
             "similar_cases_answer.system.jinja2",
             "similar_cases_answer.user.jinja2",
             user_context={
@@ -50,6 +51,7 @@ class FindSimilarCases:
                 "clusters": clusters,
             },
         )
+        return res
 
     @property
     def _language_model(self) -> LlmTool:

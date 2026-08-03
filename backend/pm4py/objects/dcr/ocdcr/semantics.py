@@ -2,7 +2,9 @@ from typing import Set
 from datetime import datetime
 from keyword import iskeyword
 import re
-
+import asyncio
+import inspect
+from concurrent.futures import ThreadPoolExecutor
 
 from pm4py.objects.dcr.ocdcr.obj import DcrGraph, DcrElement, DcrParentElement, DcrNesting, DcrSubprocess, DcrSubgraph, DcrSpawnContainer, DcrActivity, DcrRelation, DcrEffect, DcrSpawn, DcrConstraint, RelationType, DcrExpression, DcrComputation, DcrExecution
 
@@ -98,8 +100,16 @@ class DcrSemantics:
         return True
     
     @classmethod
-    def parseAttribute(cls, element: str, attribute: str) -> any:
+    def parseAttribute(cls, element: str, attribute: str, e3:str = None, e4:str = None) -> any:
         match attribute:
+            case "tool":
+                if e3 and e4:
+                    # idea is that here we can use any other parts of the graph to add attributes to the tool_call
+                    t = f"[e.activityID for e in {e3}.{e4}]"
+                    h = f"[graph.getActivity(x).data for x in [e.activityID for e in {e3}.{e4}]]"
+                    return "cls.resolveAsync("+ element + f".tool_call({t},{h},{e3}))"
+                else:
+                    return "cls.resolveAsync("+ element + f".tool_call({element}.description))"
             case "id":
                 return element + ".ID"
             case "included":
@@ -125,6 +135,9 @@ class DcrSemantics:
     def parseExpression(cls, expression: DcrExpression):
         operators = ["+", "-", "*", "/", "==", "<", ">", "<=", ">=", "and", "or", "not", "is", "in", "for", "(", ")", "[", "]", "len"]
         match expression:
+            case (e1, e2, e3, e4):
+                #TODO: here we allow for a more advanced tool call with graph.executions
+                return cls.parseAttribute(e1, e2, e3, e4)
             case (e1, e2):
                 if e1 in ["source", "target"]:
                     return cls.parseAttribute(e1, e2)
@@ -134,7 +147,9 @@ class DcrSemantics:
                 if expression in operators:
                     return expression
                 elif expression == "inInstance":
-                    return ".startswith"
+                    return ".startswith" #maybe .contains instead?
+                # elif expression == ":=":
+                    # return "="
                 else:
                     for word in re.split(" |(|)|.", expression):
                         if iskeyword(word):
@@ -144,6 +159,21 @@ class DcrSemantics:
                 return str(expression)
             case float():
                 return str(expression)
+
+    @staticmethod
+    def resolveAsync(result):
+        """Resolve an async tool call while keeping DCR semantics synchronous."""
+        if not inspect.isawaitable(result):
+            return result
+
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run(result)
+
+        # Run outside the already active event loop.
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            return executor.submit(asyncio.run, result).result()
     
     @classmethod
     def evaluateComputation(cls, computation: DcrComputation, graph: DcrGraph, source: DcrElement=None, target: DcrElement=None) -> any:
@@ -154,7 +184,9 @@ class DcrSemantics:
         try:
             res = eval(executable)
         except:
-            res = None
+            print(executable)
+            res = exec(executable)
+            # print(res)
         return res
 
     @classmethod
@@ -179,7 +211,7 @@ class DcrSemantics:
         if element.takesInput and input is not None:
             element.data = input
         elif element.computation is not None:
-            element.data = cls.evaluateComputation(element.computation, graph)
+            element.data = cls.evaluateComputation(element.computation, graph, source=element)
         graph.updatePending(element, False)
         element.executed = datetime.now() if executionTime is None else executionTime
 

@@ -69,7 +69,7 @@ class DcrChat(ChatWithHistory):
     async def execute_robot_activity(self, act: DcrActivity):
         act_id = act.ID
         print(act_id,act.data)
-        if act.data is not None:
+        if act.data is not None or act.tool_call is not None:
             execution = DcrExecution(act_id, input=act.data, role=act.role)
             self._dcr_semantics.executeActivity(execution, self._dcr_graph)
             self.trace.append(execution)
