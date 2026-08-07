@@ -24,6 +24,10 @@ from pm4py.objects.dcr.ocdcr.obj import (
     RelationType,
 )
 from pm4py.objects.dcr.ocdcr.semantics import DcrSemantics
+from tools.find_relevant_laws import FindRelevantLaws
+from tools.find_similar_cases import FindSimilarCases
+from tools.summarize_case import SummarizeCaseHistory
+from tools.tool_call import ToolCall
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -249,7 +253,7 @@ def test_round_trips_every_object_centric_relation_type(tmp_path):
     set_value = next(
         relation for relation in imported.relations if isinstance(relation, DcrSetValue)
     )
-    assert set_value.value == [("Event_source", "data"), "+", 1]
+    assert set_value.value == [("source", "data"), "+", 1]
 
 
 def test_export_adds_frontend_id_prefixes_without_mutating_graph():
@@ -424,6 +428,99 @@ def test_set_value_semantics_preserves_target_python_type():
     assert source.data == 41
     assert target.data == 42
     assert type(target.data) is int
+
+
+def test_round_trips_activity_definitions_and_tagged_computations():
+    activity = DcrActivity(
+        "automated",
+        computation=[
+            ("source", "tool"),
+            ("source", "tool", "graph", "executions"),
+            "and",
+            True,
+            3,
+            2.5,
+        ],
+        takesInput=True,
+    )
+    subprocess = DcrSubprocess(
+        "process", {activity}, computation=[("automated", "data"), "+", 1]
+    )
+    subprocess.priority = -2.5
+    graph = DcrGraph("definitions", elements={activity, subprocess})
+
+    xml = dcr_js_portal.export_as_string(graph)
+    imported = xml_dcr_js.import_from_string(xml)
+    imported_activity = imported.getActivity("Event_automated")
+    imported_subprocess = imported.getElementFromID("SubProcess_process")
+
+    assert imported_activity.computation == activity.computation
+    assert imported_activity.takesInput is True
+    assert imported_activity.eventData is None
+    assert imported_subprocess.computation == [("Event_automated", "data"), "+", 1]
+    assert imported_subprocess.priority == -2.5
+
+
+@pytest.mark.parametrize(
+    ("owner_class", "method_name", "expected"),
+    [
+        (FindRelevantLaws, "answer", ToolCall.FIND_RELEVANT_LAWS),
+        (FindSimilarCases, "answer", ToolCall.FIND_SIMILAR_CASES),
+        (
+            SummarizeCaseHistory,
+            "get_summary",
+            ToolCall.SUMMARIZE_CASE_HISTORY,
+        ),
+    ],
+)
+def test_round_trips_registered_tool_calls_without_invoking_them(
+    owner_class, method_name, expected
+):
+    activity = DcrActivity("tool")
+    # Bypass heavyweight constructors; export only inspects method identity.
+    activity.tool_call = getattr(owner_class.__new__(owner_class), method_name)
+    graph = DcrGraph("tools", elements={activity})
+
+    xml = dcr_js_portal.export_as_string(graph)
+    imported = xml_dcr_js.import_from_string(xml)
+
+    assert f'toolCall="{expected.value}"'.encode() in xml
+    assert imported.getActivity("Event_tool").tool_call is expected
+
+
+def test_rejects_unknown_and_unregistered_tool_calls():
+    unknown = '''<dcr:definitions xmlns:dcr="http://tk/schema/dcr">
+      <dcr:dcrGraph id="tools">
+        <dcr:event id="tool" toolCall="unknown" />
+      </dcr:dcrGraph>
+    </dcr:definitions>'''
+    with pytest.raises(ValueError, match="Unknown DCR tool call"):
+        xml_dcr_js.import_from_string(unknown)
+
+    activity = DcrActivity("tool")
+    activity.tool_call = lambda value: value
+    with pytest.raises(ValueError, match="Unregistered tool call"):
+        dcr_js_portal.export_as_string(DcrGraph("tools", elements={activity}))
+
+
+def test_round_trips_lossless_relation_computations():
+    source = DcrActivity("source", eventData=DcrEventData("source", int))
+    target = DcrActivity("target", eventData=DcrEventData("target", int))
+    guard = [("source", "enabled"), "and", True]
+    value = [("source", "tool", "graph", "executions"), "+", 1.5]
+    relation = DcrSetValue(source, target, value, guard=guard)
+    graph = DcrGraph(
+        "computations", elements={source, target}, relations={relation}
+    )
+
+    xml = dcr_js_portal.export_as_string(graph)
+    imported = xml_dcr_js.import_from_string(xml)
+    imported_relation = next(iter(imported.relations))
+
+    assert imported_relation.guard == guard
+    assert imported_relation.value == value
+    assert b"guardComputation=" in xml
+    assert b"valueComputation=" in xml
 
 
 def _graph_snapshot(graph):

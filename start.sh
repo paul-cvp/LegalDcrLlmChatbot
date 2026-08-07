@@ -14,6 +14,19 @@ cleanup() {
 
 trap cleanup INT TERM EXIT
 
+wait_for_backend() {
+  local health_url="http://127.0.0.1:${BACKEND_PORT:-8000}/docs"
+  echo "Waiting for backend startup..."
+  until curl --fail --silent --output /dev/null "$health_url"; do
+    if ! kill -0 "$BACKEND_PID" 2>/dev/null; then
+      echo "Backend stopped before startup completed." >&2
+      wait "$BACKEND_PID"
+      return 1
+    fi
+    sleep 0.25
+  done
+}
+
 (
   cd "$PROJECT_DIR/backend"
   python3 -m uvicorn main:app \
@@ -22,6 +35,8 @@ trap cleanup INT TERM EXIT
     --reload
 ) &
 BACKEND_PID=$!
+
+wait_for_backend
 
 (
   cd "$PROJECT_DIR/frontend"

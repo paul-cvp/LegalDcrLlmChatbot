@@ -1,9 +1,10 @@
-"""Centralized OpenAI configuration, requests, and response conversion."""
+"""Provider-neutral language-model requests and response conversion."""
 
 from __future__ import annotations
 
 import os
 from collections.abc import Awaitable, Callable
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -18,10 +19,48 @@ from object.domain import (
     LLMChatRequest,
     LLMSettings,
 )
+from tools.llms import BaseLlm, StructuredResponse
+from tools.llms.azure_llm import AzureLlm
+from tools.llms.local_llm import LocalLlm, LocalLlmSettings
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _required_environment_variable(name: str) -> str:
+    value = os.getenv(name)
+    if not value:
+        raise RuntimeError(f"Required environment variable {name} is not set.")
+    return value
+
+
+@lru_cache(maxsize=1)
+def get_llm() -> BaseLlm:
+    """Create the process-wide provider selected at application startup."""
+    load_dotenv(PROJECT_ROOT / ".env")
+    provider = os.getenv("LLM_PROVIDER", "local").strip().lower()
+    if provider == "local":
+        return LocalLlm(
+            LocalLlmSettings(
+                repository=_required_environment_variable("LOCAL_LLM_REPOSITORY"),
+                filename=_required_environment_variable("LOCAL_LLM_FILENAME"),
+            )
+        )
+    if provider == "azure":
+        return AzureLlm(
+            LLMSettings(
+                endpoint=_required_environment_variable("AZURE_OPENAI_ENDPOINT"),
+                deployment_name=_required_environment_variable(
+                    "AZURE_OPENAI_DEPLOYMENT_NAME"
+                ),
+                api_key=_required_environment_variable("AZURE_OPENAI_API_KEY"),
+            )
+        )
+    raise RuntimeError("LLM_PROVIDER must be either 'local' or 'azure'.")
 
 
 class LlmTool:
-    PROJECT_ROOT = Path(__file__).resolve().parents[2]
+    PROJECT_ROOT = PROJECT_ROOT
     PROMPTS_ROOT = PROJECT_ROOT / "backend" / "prompts"
 
     def __init__(
@@ -29,12 +68,19 @@ class LlmTool:
         instructions: str | None = None,
         settings: LLMSettings | None = None,
         client: AsyncOpenAI | None = None,
+        llm: BaseLlm | None = None,
     ) -> None:
-        self.settings = settings or self._load_settings()
-        self.client = client or AsyncOpenAI(
-            base_url=self.settings.endpoint,
-            api_key=self.settings.api_key,
-        )
+        if llm is not None and (settings is not None or client is not None):
+            raise ValueError("Provide either llm or Azure settings/client, not both.")
+        if settings is not None or client is not None:
+            if settings is None:
+                raise ValueError("Azure settings are required when injecting a client.")
+            self.llm = AzureLlm(settings, client)
+        else:
+            self.llm = llm or get_llm()
+        # Keep the legacy attributes available for injected Azure callers.
+        self.settings = getattr(self.llm, "settings", None)
+        self.client = getattr(self.llm, "client", None)
         self.instructions = instructions
         self._prompts = Environment(
             loader=FileSystemLoader(self.PROMPTS_ROOT),
@@ -72,25 +118,24 @@ class LlmTool:
         history: list[ChatHistoryEntry] | None = None,
     ) -> Any:
         instruct = input_request.instructions or self.instructions
-        conversation = []
-        if history:
-            for entry in history:
-                role = "assistant" if entry.chat_role == "assistant" else "user"
-                conversation.append({"role": role, "content": entry.item})
-            conversation.append({"role": "user", "content": input_request.text})
+        return await self.llm.request(
+            input_request,
+            history=history,
+            default_instructions=instruct,
+        )
 
-        request_arguments = {
-            "model": self.settings.deployment_name,
-            "input": conversation if history else input_request.text,
-        }
-        if instruct:
-            request_arguments["instructions"] = instruct
-        async with AsyncOpenAI(
-            base_url=self.settings.endpoint,
-            api_key=self.settings.api_key,
-        ) as client:
-            return await client.responses.create(**request_arguments)
-        # return await self.client.responses.create(**request_arguments)
+    async def request_structured(
+        self,
+        input_text: str,
+        instructions: str,
+        response_model: type[StructuredResponse],
+    ) -> StructuredResponse:
+        """Return a validated response through either configured provider."""
+        return await self.llm.request_structured(
+            input_text,
+            instructions,
+            response_model,
+        )
 
     async def request_text(self, input_text: str) -> Any:
         return await self.request(LLMChatRequest(text=input_text))
@@ -118,25 +163,12 @@ class LlmTool:
 
     @staticmethod
     def response_text(response: Any) -> str:
-        """Extract non-empty text from an OpenAI Responses API result."""
-        text = getattr(response, "output_text", None)
+        """Extract non-empty text from a provider response."""
+        text = (
+            response
+            if isinstance(response, str)
+            else getattr(response, "output_text", None)
+        )
         if not isinstance(text, str) or not text.strip():
             raise RuntimeError("The language model returned no text output.")
         return text.strip()
-
-    def _load_settings(self) -> LLMSettings:
-        load_dotenv(self.PROJECT_ROOT / ".env")
-        return LLMSettings(
-            endpoint=self._required_environment_variable("AZURE_OPENAI_ENDPOINT"),
-            deployment_name=self._required_environment_variable(
-                "AZURE_OPENAI_DEPLOYMENT_NAME"
-            ),
-            api_key=self._required_environment_variable("AZURE_OPENAI_API_KEY"),
-        )
-
-    @staticmethod
-    def _required_environment_variable(name: str) -> str:
-        value = os.getenv(name)
-        if not value:
-            raise RuntimeError(f"Required environment variable {name} is not set.")
-        return value

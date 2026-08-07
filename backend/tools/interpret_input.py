@@ -43,16 +43,12 @@ class InterpretInput(LlmTool):
         if response_model is None:
             raise TypeError(f"Unsupported DCR input type: {data_type!r}.")
 
-        response = await self.client.responses.parse(
-            model=self.settings.deployment_name,
-            instructions=self.instructions,
-            input=(
+        parsed = await self.request_structured(
+            input_text=(
                 f"Expected Python type: {data_type.__name__}\n"
                 f"User answer: {input_text}"
             ),
-            text_format=response_model,
+            instructions=self.instructions,
+            response_model=response_model,
         )
-        parsed = getattr(response, "output_parsed", None)
-        if parsed is None:
-            raise RuntimeError("The language model returned no structured value.")
         return parsed.value

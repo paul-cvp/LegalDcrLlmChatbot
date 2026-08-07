@@ -21,6 +21,8 @@ uvicorn[standard]
 httpx
 pytest
 openai
+huggingface-hub
+llama-cpp-python
 python-dotenv
 jinja2
 sentence-transformers

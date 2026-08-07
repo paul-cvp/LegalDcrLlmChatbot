@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import math
 
 from lxml import etree
@@ -19,6 +20,7 @@ from pm4py.objects.dcr.ocdcr.obj import (
     DcrSubgraph,
     RelationType,
 )
+from tools.tool_call import ToolCall
 
 
 DCR_NAMESPACE = "http://tk/schema/dcr"
@@ -130,6 +132,18 @@ class _EditorXmlExporter:
             xml.set("included", self._boolean(element.included))
             xml.set("executed", self._boolean(element.executed is not None))
             xml.set("pending", self._boolean(element.pending))
+            xml.set("takesInput", self._boolean(element.takesInput))
+            if element.computation is not None:
+                xml.set(
+                    "computation", self._computation(element.computation)
+                )
+            tool = ToolCall.from_callable(element.tool_call)
+            if tool is not None:
+                xml.set("toolCall", tool.value)
+            elif not self._is_default_tool_call(element.tool_call):
+                raise ValueError(
+                    f"Unregistered tool call on activity {element.ID!r}."
+                )
         if isinstance(element, DcrSubgraph):
             xml.set("multi-instance", "true")
         if type(element) is DcrActivity and element.eventData is not None:
@@ -156,12 +170,18 @@ class _EditorXmlExporter:
             sourceRef=self.element_ids[relation.source],
             targetRef=self.element_ids[relation.target],
         )
-        if relation.guard:
-            xml.set("guard", self._expression(relation.guard, relation))
+        if relation.guard is not None:
+            xml.set("guardComputation", self._computation(relation.guard))
+            expression = self._optional_expression(relation.guard, relation)
+            if expression is not None:
+                xml.set("guard", expression)
         if relation.forAll:
             xml.set("forAll", "true")
         if isinstance(relation, DcrSetValue):
-            xml.set("value", self._expression(relation.value, relation))
+            xml.set("valueComputation", self._computation(relation.value))
+            expression = self._optional_expression(relation.value, relation)
+            if expression is not None:
+                xml.set("value", expression)
         return xml
 
     def _diagram_xml(self):
@@ -309,6 +329,50 @@ class _EditorXmlExporter:
             else:
                 tokens.append(str(token))
         return " ".join(tokens)
+
+    def _optional_expression(self, computation, relation):
+        try:
+            return self._expression(computation, relation)
+        except ValueError:
+            # Tagged JSON remains authoritative for Python-only expressions.
+            return None
+
+    def _computation(self, computation):
+        encoded = []
+        for token in computation:
+            if isinstance(token, tuple):
+                if len(token) not in {2, 4} or not all(
+                    isinstance(part, str) for part in token
+                ):
+                    raise ValueError(f"Invalid DCR computation tuple: {token!r}.")
+                reference = list(token)
+                if reference[0] not in {"source", "target"}:
+                    element = self.graph.getElementFromID(reference[0])
+                    if element in self.element_ids:
+                        reference[0] = self.element_ids[element]
+                encoded.append({"tuple": reference})
+            elif type(token) in {str, bool, int, float}:
+                encoded.append(token)
+            else:
+                raise ValueError(
+                    f"Unsupported DCR computation token: {token!r}."
+                )
+        try:
+            return json.dumps(encoded, separators=(",", ":"), allow_nan=False)
+        except ValueError as exc:
+            raise ValueError("DCR computations require finite numbers.") from exc
+
+    @staticmethod
+    def _is_default_tool_call(value):
+        if value is None:
+            return True
+        function = getattr(value, "__func__", value)
+        return (
+            getattr(function, "__module__", None)
+            == "pm4py.objects.dcr.ocdcr.obj"
+            and getattr(function, "__qualname__", None)
+            == "DcrActivity.__init__.<locals>.<lambda>"
+        )
 
     def _relation_id(self, relation):
         if relation in self.relation_ids:

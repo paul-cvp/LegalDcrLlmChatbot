@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import json
 import math
 import re
 from datetime import datetime
@@ -25,6 +26,7 @@ from pm4py.objects.dcr.ocdcr.obj import (
     RelationType,
 )
 from pm4py.util import constants
+from tools.tool_call import ToolCall
 
 
 DCR_NAMESPACE = "http://tk/schema/dcr"
@@ -128,11 +130,15 @@ class _EditorXmlImporter:
                 element_id,
                 role=element.get("role"),
                 description=description,
-                priority=self._priority(element),
                 label=element_id if label is None else label,
                 included=self._boolean(element, "included", True),
                 pending=self._boolean(element, "pending", False),
-                takesInput=event_data is not None,
+                computation=self._parse_computation_attribute(
+                    element, "computation"
+                ),
+                takesInput=self._boolean(
+                    element, "takesInput", event_data is not None
+                ),
                 eventData=event_data,
             )
         elif element_type == "nesting":
@@ -145,6 +151,9 @@ class _EditorXmlImporter:
                 children,
                 included=self._boolean(element, "included", True),
                 pending=self._boolean(element, "pending", False),
+                computation=self._parse_computation_attribute(
+                    element, "computation"
+                ),
             )
         if element_type != "event":
             description = element.get("description")
@@ -154,11 +163,22 @@ class _EditorXmlImporter:
 
         parsed.bounds = self.bounds_by_id.get(element_id)
 
-        if isinstance(parsed, DcrActivity) and self._boolean(
-            element, "executed", False
-        ):
-            # Editor XML stores only the executed flag, not its timestamp.
-            parsed.executed = datetime.min
+        if isinstance(parsed, DcrActivity):
+            parsed.priority = self._priority(element)
+            parsed.takesInput = self._boolean(
+                element, "takesInput", parsed.eventData is not None
+            )
+            tool_name = element.get("toolCall")
+            if tool_name is not None:
+                try:
+                    parsed.tool_call = ToolCall(tool_name)
+                except ValueError as exc:
+                    raise ValueError(
+                        f"Unknown DCR tool call: {tool_name!r}."
+                    ) from exc
+            if self._boolean(element, "executed", False):
+                # Editor XML stores only the executed flag, not its timestamp.
+                parsed.executed = datetime.min
         self.elements.add(parsed)
         self.elements_by_id[element_id] = parsed
         return parsed
@@ -181,12 +201,18 @@ class _EditorXmlImporter:
         relation_type = (element.get("type") or "").lower()
         source = self._element_reference(element, "sourceRef")
         target = self._element_reference(element, "targetRef")
-        guard = self._parse_expression(element.get("guard"))
+        guard = self._parse_computation_attribute(element, "guardComputation")
+        if guard is None:
+            guard = self._parse_expression(element.get("guard"))
         for_all = self._boolean(element, "forAll", False)
         if relation_type == "spawn":
             relation = DcrSpawn(source, target, guard=guard, forAll=for_all)
         elif relation_type in {"setvalue", "update"}:
-            value = self._parse_expression(element.get("value"), required=True)
+            value = self._parse_computation_attribute(
+                element, "valueComputation"
+            )
+            if value is None:
+                value = self._parse_expression(element.get("value"), required=True)
             relation = DcrSetValue(
                 source, target, value, guard=guard, forAll=for_all
             )
@@ -242,6 +268,43 @@ class _EditorXmlImporter:
                 raise ValueError(f"Guard references unknown variable: {token!r}.")
             else:
                 computation.append(token)
+        return computation
+
+    def _parse_computation_attribute(self, element, attribute):
+        value = element.get(attribute)
+        if value is None:
+            return None
+        try:
+            encoded = json.loads(value)
+        except json.JSONDecodeError as exc:
+            raise ValueError(
+                f"Invalid {attribute} JSON: {value!r}."
+            ) from exc
+        if not isinstance(encoded, list):
+            raise ValueError(f"{attribute} must encode a computation list.")
+
+        computation = []
+        for token in encoded:
+            if isinstance(token, dict):
+                reference = token.get("tuple")
+                if (
+                    set(token) != {"tuple"}
+                    or not isinstance(reference, list)
+                    or len(reference) not in {2, 4}
+                    or not all(isinstance(part, str) for part in reference)
+                ):
+                    raise ValueError(
+                        f"Invalid tuple token in {attribute}: {token!r}."
+                    )
+                computation.append(tuple(reference))
+            elif type(token) in {str, bool, int, float} and not (
+                isinstance(token, float) and not math.isfinite(token)
+            ):
+                computation.append(token)
+            else:
+                raise ValueError(
+                    f"Unsupported token in {attribute}: {token!r}."
+                )
         return computation
 
     def _parse_diagram(self) -> None:
