@@ -33,17 +33,17 @@
     "chatEmptyStateTitle": "Verilerinizle sohbet edin",
     "chatEmptyStateSubtitle": "Bir soru sorun veya bir örnek deneyin",
     "defaultExamples": {
-        "1": "Northwind Health Plus planımda standart planda olmayan neler var?",
-        "2": "Performans değerlendirmesinde ne olur?",
-        "3": "Bir Ürün Yöneticisi ne yapar?",
-        "placeholder": "Yeni bir soru yazın (ör. planım yıllık göz muayenelerini kapsıyor mu?)"
+        "1": "18 yaşından küçük hasta bir çocuğa bakarken ne zaman bakım ödeneği alabilirim?",
+        "2": "Çocuğum başka gözetim aldığında kısmi bakım ödeneği nasıl azaltılır?",
+        "3": "Bakım veya eğitim ödeneği için hangi belgeler gereklidir?",
+        "placeholder": "Bakım veya eğitim ödenekleri hakkında bir soru yazın"
     },
     "askTitle": "Verilerinize sorun",
     "multimodalExamples": {
-        "1": "Faiz oranları ve GSYİH'nin finansal piyasalar üzerindeki etkisini karşılaştırın.",
-        "2": "Önümüzdeki beş yıl için S&P 500 endeksinin beklenen trendi nedir? Geçmiş S&P 500 performansı ile karşılaştırın",
-        "3": "Petrol fiyatları ile borsa trendleri arasında herhangi bir korelasyon bulabilir misiniz?",
-        "placeholder": "Örnek: Planım yıllık göz muayenelerini kapsıyor mu?"
+        "1": "18 yaşından küçük hasta bir çocuğa bakarken ne zaman bakım ödeneği alabilirim?",
+        "2": "Çocuğum başka gözetim aldığında kısmi bakım ödeneği nasıl azaltılır?",
+        "3": "Bakım veya eğitim ödeneği için hangi belgeler gereklidir?",
+        "placeholder": "Örnek: Bakım ödeneği için hangi belgeleri sunmalıyım?"
     },
     "generatingAnswer": "Cevap oluşturuluyor",
     "citationWithColon": "Alıntı:",
@@ -55,7 +55,6 @@
         "stopRecording": "Kaydı durdur",
         "showThoughtProcess": "Düşünce sürecini göster",
         "showSupportingContent": "Destekleyici içeriği göster",
-        "speakAnswer": "Cevabı seslendir",
         "info": "Bilgi",
         "save": "Kaydet",
         "copy": "Kopyala",
@@ -71,6 +70,17 @@
         "languagePicker": "Dilini seç",
         "headerText": "Cevap oluşturmayı yapılandır",
         "closeButton": "Kapat",
+        "dcrRole": "DCR Rolü",
+        "dcrRoleOptions": {
+            "Citizen": "Vatandaş",
+            "Caseworker": "Vaka görevlisi"
+        },
+        "searchIndex": "Arama dizini",
+        "searchIndexOptions": {
+            "all": "Tümü",
+            "relevantLaws": "İlgili yasalar",
+            "similarCases": "Benzer vakalar"
+        },
         "promptTemplate": "Prompt şablonunu geçersiz kıl",
         "temperature": "Sıcaklık",
         "minimumSearchScore": "Minimum arama skoru",
@@ -99,7 +109,7 @@
             "high": "Yüksek",
             "xhigh": "Çok yüksek"
         },
-        "useSuggestFollowupQuestions": "Takip soruları öner",
+        "useSuggestFollowupQuestions": "Takip sorularını dahil et",
         "useAgenticKnowledgeBase": "Ajan temelli getirim kullan",
         "useWebSource": "Web aramasını dahil et",
         "useSharePointSource": "SharePoint kaynağını dahil et",
@@ -129,24 +139,20 @@
     "helpTexts": {
         "promptTemplate": "Soru ve arama sonuçlarına dayalı olarak cevabı oluşturmak için kullanılan prompt'u geçersiz kılar. Mevcut prompt'u genişletmek yerine tamamını değiştirmek için prompt'unuza '>>>' ile başlayın.",
         "temperature": "Cevabı oluşturan dil modeline yapılan isteğin sıcaklığını ayarlar. Daha yüksek sıcaklıklar daha yaratıcı cevaplar verir, ancak daha az gerçekçi olabilirler.",
-        "searchScore": "Azure AI arama sonuçları için minimum skoru ayarlar. Skor aralığı, yalnızca vektörler, yalnızca metin veya hibrit (varsayılan) arama moduna bağlı olarak değişir.",
+        "searchScore": "Bir arama sonucunun karşılaması gereken minimum alaka puanını ayarlar.",
         "rerankerScore": "Anlamsal sıralayıcıdan gelen arama sonuçları için minimum skoru ayarlar. Skor her zaman 0-4 arasında değişir. Daha yüksek skor, sonucun soruya daha anlamsal olarak uygun olduğunu gösterir.",
-        "retrieveNumber": "Azure AI arama sonuçlarından getirilecek sonuç sayısını ayarlar. Daha fazla sonuç doğru cevabı bulma olasılığını artırabilir, ancak modelin 'ortada kaybolmasına' da neden olabilir.",
+        "retrieveNumber": "Getirilecek arama sonucu sayısını ayarlar. Daha fazla sonuç kapsamı artırabilir ancak daha az ilgili bağlam ekleyebilir.",
         "agenticReasoningEffort": "Ajans, çoklu sorgu planları oluştururken ne kadar akıl yürütme uygulayacağını kontrol eder. Daha yüksek ayarlar hatırlamayı artırabilir ancak belirteçleri ve gecikmeyi yükseltir.",
         "includeCategory": "Arama sonuçlarına dahil edilecek bir kategoriyi belirtir. Varsayılan veri setinde kategori yoktur.",
         "excludeCategory": "Arama sonuçlarından hariç tutulacak bir kategoriyi belirtir. Varsayılan veri setinde kategori yoktur.",
-        "useSemanticReranker": "Azure AI Arama anlamsal sıralayıcısını etkinleştirir, bu model arama sonuçlarını kullanıcının sorgusuna anlamsal benzerliğe göre sıralar.",
         "useSemanticCaptions": "Tam arama sonucu yerine anlamsal altyazıları dil modeline gönderir. Anlamsal sıralama sırasında her arama sonucu için bir anlamsal altyazı çıkarılır.",
-        "useQueryRewriting": "Azure AI arama sonuçlarını iyileştirmek için kullanıcı sorgusunu değiştiren bir işlem. Anlamsal sıralayıcının etkin olmasını gerektirir.",
         "reasoningEffort": "Dil modeli için akıl yürütme çabasını ayarlar. Daha yüksek değerler daha fazla akıl yürütme ile sonuçlanır, ancak yanıt oluşturmak daha uzun sürebilir. Varsayılan orta seviyedir.",
         "suggestFollowupQuestions": "Kullanıcının sorusuna dayalı olarak dil modelinden takip soruları önermesini ister.",
         "textEmbeddings": "Seçildiğinde, arama çıkarılan metin parçalarının yalnızca metin gömme modelinden gömmeleri kullanacaktır.",
         "imageEmbeddings": "Seçildiğinde, arama çıkarılan görsellerin çoklu ortam gömme modelinden gömmeleri kullanacaktır.",
         "llmTextInputs": "Seçildiğinde, arama sonuçlarındaki metin içeriği bağlam olarak LLM'e gönderilir.",
         "llmImageInputs": "Seçildiğinde, arama sonuçlarındaki görseller bağlam olarak LLM'e gönderilir.",
-        "retrievalMode": "Azure AI arama sorgusu için getirme modunu ayarlar. `Vektörler + Metin (Hibrit)` vektör araması ve tam metin aramasını kullanır, `Vektörler` yalnızca vektör aramasını, `Metin` yalnızca tam metin aramasını kullanır. Hibrit genellikle en iyisidir.",
         "streamChat": "Yanıt oluşturulurken sohbet arayüzüne gerçek zamanlı olarak yanıtı sürekli olarak gönderir.",
-        "useAgenticKnowledgeBase": "Çoklu sorgu planlaması için Azure AI Search'ten agent temelli getirimi kullanın. Her zaman semantik sıralayıcı kullanır.",
         "useWebSource": "İndekslenmiş veri setinizin yanı sıra web arama sonuçlarıyla getirimi genişletin.",
         "useSharePointSource": "İndekslenmiş veri setinizin yanı sıra SharePoint içeriğiyle getirimi genişletin."
     },

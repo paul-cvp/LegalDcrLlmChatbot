@@ -1,0 +1,17 @@
+Question:
+{{ query }}
+
+Retrieved DCR graphs:
+{% if graphs %}
+{% for graph in graphs %}
+[{{ graph.source }}]
+Graph ID: {{ graph.graph_id }}
+Relevant graph evidence:
+{{ graph.excerpt }}
+
+{% endfor %}
+{% else %}
+No executable XML DCR graphs were retrieved.
+{% endif %}
+
+Describe the available graphs and how the user can select one.

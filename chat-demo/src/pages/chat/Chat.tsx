@@ -15,7 +15,17 @@ import readNDJSONStream from "ndjson-readablestream";
 
 import styles from "./Chat.module.css";
 
-import { chatApi, configApi, RetrievalMode, ChatAppResponse, ChatAppResponseOrError, ChatAppRequest, ResponseMessage, SpeechConfig } from "../../api";
+import {
+    chatApi,
+    configApi,
+    RetrievalMode,
+    ChatAppResponse,
+    ChatAppResponseOrError,
+    ChatAppRequest,
+    DcrRole,
+    SearchIndex,
+    ResponseMessage
+} from "../../api";
 import { Answer, AnswerError, AnswerLoading } from "../../components/Answer";
 import { QuestionInput } from "../../components/QuestionInput";
 import { ExampleList } from "../../components/Example";
@@ -37,6 +47,8 @@ const Chat = () => {
     const [minimumRerankerScore, setMinimumRerankerScore] = useState<number>(1.9);
     const [minimumSearchScore, setMinimumSearchScore] = useState<number>(0);
     const [retrieveCount, setRetrieveCount] = useState<number>(5);
+    const [dcrRole, setDcrRole] = useState<DcrRole>("Citizen");
+    const [searchIndex, setSearchIndex] = useState<SearchIndex>("All");
     const [agenticReasoningEffort, setRetrievalReasoningEffort] = useState<string>("minimal");
     const [retrievalMode, setRetrievalMode] = useState<RetrievalMode>(RetrievalMode.Hybrid);
     const [useSemanticRanker, setUseSemanticRanker] = useState<boolean>(true);
@@ -71,7 +83,6 @@ const Chat = () => {
     const [selectedAnswer, setSelectedAnswer] = useState<number>(0);
     const [answers, setAnswers] = useState<[user: string, response: ChatAppResponse][]>([]);
     const [streamedAnswers, setStreamedAnswers] = useState<[user: string, response: ChatAppResponse][]>([]);
-    const [speechUrls, setSpeechUrls] = useState<(string | null)[]>([]);
 
     const [showMultimodalOptions, setShowMultimodalOptions] = useState<boolean>(false);
     const [showSemanticRankerOption, setShowSemanticRankerOption] = useState<boolean>(false);
@@ -80,7 +91,6 @@ const Chat = () => {
     const [showVectorOption, setShowVectorOption] = useState<boolean>(false);
     const [showLanguagePicker, setshowLanguagePicker] = useState<boolean>(false);
     const [showSpeechInput, setShowSpeechInput] = useState<boolean>(false);
-    const [showSpeechOutputBrowser, setShowSpeechOutputBrowser] = useState<boolean>(false);
     const [showChatHistoryBrowser, setShowChatHistoryBrowser] = useState<boolean>(false);
     const [showAgenticRetrievalOption, setShowAgenticRetrievalOption] = useState<boolean>(false);
     const [webSourceSupported, setWebSourceSupported] = useState<boolean>(false);
@@ -90,17 +100,6 @@ const Chat = () => {
     const [useAgenticKnowledgeBase, setUseAgenticRetrieval] = useState<boolean>(false);
     const [hideMinimalRetrievalReasoningOption, setHideMinimalRetrievalReasoningOption] = useState<boolean>(false);
     const streamingDisabledByOverrides = useAgenticKnowledgeBase && webSourceEnabled;
-
-    const audio = useRef(new Audio()).current;
-    const [isPlaying, setIsPlaying] = useState(false);
-
-    const speechConfig: SpeechConfig = {
-        speechUrls,
-        setSpeechUrls,
-        audio,
-        isPlaying,
-        setIsPlaying
-    };
 
     const getConfig = async () => {
         configApi().then(config => {
@@ -128,7 +127,6 @@ const Chat = () => {
             }
             setshowLanguagePicker(config.showLanguagePicker);
             setShowSpeechInput(config.showSpeechInput);
-            setShowSpeechOutputBrowser(config.showSpeechOutputBrowser);
             setShowChatHistoryBrowser(config.showChatHistoryBrowser);
             setShowAgenticRetrievalOption(config.showAgenticRetrievalOption);
             setUseAgenticRetrieval(config.showAgenticRetrievalOption);
@@ -255,6 +253,8 @@ const Chat = () => {
                 messages: [...messages, { content: question, role: "user" }],
                 context: {
                     overrides: {
+                        dcr_role: dcrRole,
+                        search_index: searchIndex,
                         prompt_template: promptTemplate.length === 0 ? undefined : promptTemplate,
                         include_category: includeCategory.length === 0 ? undefined : includeCategory,
                         exclude_category: excludeCategory.length === 0 ? undefined : excludeCategory,
@@ -314,7 +314,6 @@ const Chat = () => {
                     historyManager.addItem(parsedResponse.session_state, [...answers, [question, parsedResponse as ChatAppResponse]]);
                 }
             }
-            setSpeechUrls([...speechUrls, null]);
         } catch (e) {
             if (e instanceof DOMException && e.name === "AbortError") {
                 // Stopped during loading - restore question to input
@@ -335,7 +334,6 @@ const Chat = () => {
         setActiveCitation(undefined);
         setActiveAnalysisPanelTab(undefined);
         setAnswers([]);
-        setSpeechUrls([]);
         setStreamedAnswers([]);
         setIsLoading(false);
         setIsStreaming(false);
@@ -361,6 +359,12 @@ const Chat = () => {
 
     const handleSettingsChange = (field: string, value: any) => {
         switch (field) {
+            case "dcrRole":
+                setDcrRole(value);
+                break;
+            case "searchIndex":
+                setSearchIndex(value);
+                break;
             case "promptTemplate":
                 setPromptTemplate(value);
                 break;
@@ -546,15 +550,12 @@ const Chat = () => {
                                                 isStreaming={true}
                                                 key={index}
                                                 answer={streamedAnswer[1]}
-                                                index={index}
-                                                speechConfig={speechConfig}
                                                 isSelected={false}
                                                 onCitationClicked={c => onShowCitation(c, index)}
                                                 onThoughtProcessClicked={() => onToggleTab(AnalysisPanelTabs.ThoughtProcessTab, index)}
                                                 onSupportingContentClicked={() => onToggleTab(AnalysisPanelTabs.SupportingContentTab, index)}
                                                 onFollowupQuestionClicked={q => makeApiRequest(q)}
                                                 showFollowupQuestions={useSuggestFollowupQuestions && answers.length - 1 === index}
-                                                showSpeechOutputBrowser={showSpeechOutputBrowser}
                                             />
                                         </div>
                                     </div>
@@ -568,15 +569,12 @@ const Chat = () => {
                                                 isStreaming={false}
                                                 key={index}
                                                 answer={answer[1]}
-                                                index={index}
-                                                speechConfig={speechConfig}
                                                 isSelected={selectedAnswer === index && activeAnalysisPanelTab !== undefined}
                                                 onCitationClicked={c => onShowCitation(c, index)}
                                                 onThoughtProcessClicked={() => onToggleTab(AnalysisPanelTabs.ThoughtProcessTab, index)}
                                                 onSupportingContentClicked={() => onToggleTab(AnalysisPanelTabs.SupportingContentTab, index)}
                                                 onFollowupQuestionClicked={q => makeApiRequest(q)}
                                                 showFollowupQuestions={useSuggestFollowupQuestions && answers.length - 1 === index}
-                                                showSpeechOutputBrowser={showSpeechOutputBrowser}
                                             />
                                         </div>
                                     </div>
@@ -667,39 +665,11 @@ const Chat = () => {
                     </DrawerHeader>
                     <DrawerBody>
                         <Settings
-                            promptTemplate={promptTemplate}
-                            temperature={temperature}
+                            dcrRole={dcrRole}
+                            searchIndex={searchIndex}
+                            includeFollowupQuestions={useSuggestFollowupQuestions}
                             retrieveCount={retrieveCount}
-                            agenticReasoningEffort={agenticReasoningEffort}
                             minimumSearchScore={minimumSearchScore}
-                            minimumRerankerScore={minimumRerankerScore}
-                            useSemanticRanker={useSemanticRanker}
-                            useSemanticCaptions={useSemanticCaptions}
-                            useQueryRewriting={useQueryRewriting}
-                            reasoningEffort={reasoningEffort}
-                            reasoningEffortOptions={reasoningEffortOptions}
-                            excludeCategory={excludeCategory}
-                            includeCategory={includeCategory}
-                            retrievalMode={retrievalMode}
-                            showMultimodalOptions={showMultimodalOptions}
-                            sendTextSources={sendTextSources}
-                            sendImageSources={sendImageSources}
-                            searchTextEmbeddings={searchTextEmbeddings}
-                            searchImageEmbeddings={searchImageEmbeddings}
-                            showSemanticRankerOption={showSemanticRankerOption}
-                            showQueryRewritingOption={showQueryRewritingOption}
-                            showReasoningEffortOption={showReasoningEffortOption}
-                            showVectorOption={showVectorOption}
-                            shouldStream={shouldStream}
-                            streamingEnabled={streamingEnabled}
-                            useSuggestFollowupQuestions={useSuggestFollowupQuestions}
-                            showAgenticRetrievalOption={showAgenticRetrievalOption}
-                            useAgenticKnowledgeBase={useAgenticKnowledgeBase}
-                            useWebSource={webSourceEnabled}
-                            showWebSourceOption={webSourceSupported}
-                            useSharePointSource={sharePointSourceEnabled}
-                            showSharePointSourceOption={sharePointSourceSupported}
-                            hideMinimalRetrievalReasoningOption={hideMinimalRetrievalReasoningOption}
                             onChange={handleSettingsChange}
                         />
                         <div style={{ marginTop: "auto", padding: "16px 0" }}>

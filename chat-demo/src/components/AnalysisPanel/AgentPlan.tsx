@@ -75,7 +75,7 @@ const renderDetail = (step: QueryPlanStep) => {
                 <>
                     <TokenUsageGraph tokenUsage={usage} labels={{ total: "Total tokens" }} variant="totalOnly" title="" />
                     <div style={{ fontSize: "0.85em", color: "#666", paddingLeft: "6px" }}>
-                        This step uses Azure AI Search models, so the token capacity does not affect the deployed model.
+                        This step uses dedicated search models, so the token capacity does not affect the deployed model.
                     </div>
                 </>
             );

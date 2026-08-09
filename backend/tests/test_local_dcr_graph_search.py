@@ -184,5 +184,27 @@ def test_find_relevant_dcr_graphs_delegates_to_local_search():
     assert FindRelevantDcrGraphs(FakeSearch()).find("expense", 3) == ["result"]
 
 
+def test_search_filters_format_before_applying_limit(tmp_path):
+    graphs = tmp_path / "graphs"
+    index = tmp_path / "index"
+    graphs.mkdir()
+    (graphs / "expense.json").write_text(
+        json.dumps({"id": "json-expense", "label": "expense"})
+    )
+    (graphs / "review.xml").write_text(
+        '<dcr:definitions xmlns:dcr="http://tk/schema/dcr">'
+        '<dcr:dcrGraph id="xml-review"><dcr:event id="e" label="review" />'
+        '</dcr:dcrGraph></dcr:definitions>'
+    )
+
+    results = make_search(graphs, index).search(
+        "expense",
+        top_k=1,
+        graph_format="xml",
+    )
+
+    assert [result.source for result in results] == ["review.xml"]
+
+
 async def _first_page(parser, content):
     return await anext(parser.parse(io.BytesIO(content)))

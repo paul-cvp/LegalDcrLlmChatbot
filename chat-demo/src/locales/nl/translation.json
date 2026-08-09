@@ -33,17 +33,17 @@
     "chatEmptyStateTitle": "Chat met je gegevens",
     "chatEmptyStateSubtitle": "Stel een vraag of probeer een voorbeeld",
     "defaultExamples": {
-        "1": "Wat zit er in mijn Northwind Health Plus-pakket dat niet in het standaardpakket zit?",
-        "2": "Wat gebeurt er tijdens een functioneringsgesprek?",
-        "3": "Wat doet een Product Manager?",
-        "placeholder": "Typ een nieuwe vraag (bijv. dekt mijn pakket jaarlijkse oogonderzoeken?)"
+        "1": "Wanneer heb ik recht op een zorguitkering voor een ziek kind jonger dan 18 jaar?",
+        "2": "Hoe wordt een gedeeltelijke zorguitkering verlaagd als mijn kind ander toezicht krijgt?",
+        "3": "Welke documenten zijn vereist voor een zorg- of opleidingsuitkering?",
+        "placeholder": "Stel een vraag over zorg- of opleidingsuitkeringen"
     },
     "askTitle": "Stel je vraag aan de data",
     "multimodalExamples": {
-        "1": "Vergelijk de impact van rentetarieven en het BBP op financiële markten.",
-        "2": "Wat is de verwachte trend voor de S&P 500-index voor de komende vijf jaar? Vergelijk dit met de eerdere prestaties van de S&P 500",
-        "3": "Kun je enige correlatie vinden tussen olieprijzen en markttrends?",
-        "placeholder": "Voorbeeld: dekt mijn pakket jaarlijkse oogonderzoeken?"
+        "1": "Wanneer heb ik recht op een zorguitkering voor een ziek kind jonger dan 18 jaar?",
+        "2": "Hoe wordt een gedeeltelijke zorguitkering verlaagd als mijn kind ander toezicht krijgt?",
+        "3": "Welke documenten zijn vereist voor een zorg- of opleidingsuitkering?",
+        "placeholder": "Voorbeeld: welke documenten moet ik indienen voor een zorguitkering?"
     },
     "generatingAnswer": "Antwoord genereren",
     "citationWithColon": "Citaat:",
@@ -55,7 +55,6 @@
         "stopRecording": "Opname stoppen",
         "showThoughtProcess": "Denkproces tonen",
         "showSupportingContent": "Ondersteunende inhoud tonen",
-        "speakAnswer": "Antwoord uitspreken",
         "info": "Info",
         "save": "Opslaan",
         "copy": "Kopieer",
@@ -71,6 +70,17 @@
         "languagePicker": "Selecteer je taal",
         "headerText": "Antwoordgeneratie instellen",
         "closeButton": "Sluiten",
+        "dcrRole": "DCR-rol",
+        "dcrRoleOptions": {
+            "Citizen": "Burger",
+            "Caseworker": "Dossierbehandelaar"
+        },
+        "searchIndex": "Zoekindex",
+        "searchIndexOptions": {
+            "all": "Alles",
+            "relevantLaws": "Relevante wetten",
+            "similarCases": "Vergelijkbare zaken"
+        },
         "promptTemplate": "Prompt-template overschrijven",
         "temperature": "Temperatuur",
         "minimumSearchScore": "Minimale zoekscore",
@@ -99,7 +109,7 @@
             "high": "Hoog",
             "xhigh": "Extra hoog"
         },
-        "useSuggestFollowupQuestions": "Vervolgvragen voorstellen",
+        "useSuggestFollowupQuestions": "Vervolgvragen opnemen",
         "useAgenticKnowledgeBase": "Gebruik agentische retrieval",
         "useWebSource": "Websearch opnemen",
         "useSharePointSource": "SharePoint-bron opnemen",
@@ -129,24 +139,20 @@
     "helpTexts": {
         "promptTemplate": "Overschrijft de prompt die wordt gebruikt om het antwoord te genereren op basis van de vraag en zoekresultaten. Om de bestaande prompt uit te breiden in plaats van te overschrijven, start je prompt met '>>>'",
         "temperature": "Stelt de temperatuur in van het verzoek aan het taalmodel dat het antwoord genereert. Hogere temperaturen leiden tot creatievere antwoorden, maar kunnen minder feitelijk zijn.",
-        "searchScore": "Stelt een minimale score in voor zoekresultaten van de Azure AI zoekfunctie. De bereik van de score varieert afhankelijk van de zoekmodus: hybride (standaard), alleen vectoren, of alleen tekst.",
+        "searchScore": "Stelt de minimale relevantiescore in waaraan een zoekresultaat moet voldoen.",
         "rerankerScore": "Stelt een minimale score in voor zoekresultaten van de semantische ranker. De score varieert van 0 tot 4, waarbij een hogere score aangeeft dat het resultaat semantisch relevanter is voor de vraag.",
-        "retrieveNumber": "Stelt het aantal zoekresultaten in om op te halen van Azure AI zoekfunctie. Meer resultaten vergroten de kans op het juiste antwoord, maar kunnen ook leiden tot het 'lost in the middle' probleem.",
+        "retrieveNumber": "Stelt het aantal op te halen zoekresultaten in. Meer resultaten kunnen de dekking verbeteren, maar minder relevante context toevoegen.",
         "agenticReasoningEffort": "Bepaalt hoeveel redeneren de agent toepast bij het opstellen van multi-query plannen. Meer inspanning kan de recall verbeteren, maar verhoogt tokens en latency.",
         "includeCategory": "Specificeert een categorie om op te nemen in de zoekresultaten. Er zijn geen categorieën in de standaard dataset.",
         "excludeCategory": "Specificeert een categorie om uit te sluiten van de zoekresultaten. Er zijn geen categorieën in de standaard dataset.",
-        "useSemanticReranker": "Activeert de semantische ranker van Azure AI Search, een model dat zoekresultaten rangschikt op basis van semantische overeenkomst met de zoekopdracht.",
         "useSemanticCaptions": "Stuurt semantische bijschriften naar het taalmodel in plaats van het volledige zoekresultaat. Een semantisch bijschrift wordt geëxtraheerd voor ieder zoekresultaat tijdens het toepassen van de semantische ranker.",
-        "useQueryRewriting": "Schakelt Azure AI Search query herformulering in, een proces dat de query van de gebruiker wijzigt om zoekresultaten te verbeteren. Vereist dat semantische rangschikking is ingeschakeld.",
         "reasoningEffort": "Stelt de redeneerinspanning voor het taalmodel in. Hogere waarden resulteren in meer redeneren, maar kunnen langer duren om een reactie te genereren. De standaard is gemiddeld.",
         "suggestFollowupQuestions": "Vraagt het taalmodel om vervolgvragen voor te stellen op basis van de vraag.",
         "textEmbeddings": "Wanneer geselecteerd, zal de zoekopdracht embeddings gebruiken van het tekstgebaseerde embeddings model voor geëxtraheerde tekststukken.",
         "imageEmbeddings": "Wanneer geselecteerd, zal de zoekopdracht embeddings gebruiken van het multimodale embeddings model voor geëxtraheerde afbeeldingen.",
         "llmTextInputs": "Wanneer geselecteerd, wordt tekstuele inhoud uit de zoekresultaten als context naar het taalmodel gestuurd.",
         "llmImageInputs": "Wanneer geselecteerd, worden afbeeldingen uit de zoekresultaten als context naar het taalmodel gestuurd.",
-        "retrievalMode": "Stelt de zoekmodus in voor de Azure AI zoekopdracht. `Vectoren + Tekst (Hybride)` gebruikt vector en volledige tekst, `Vectoren` alleen de vector, en `Tekst` alleen de volledige tekst. Hybride is meestal optimaal.",
         "streamChat": "Geeft het antwoord in real-time weer in de chat terwijl het wordt gegenereerd.",
-        "useAgenticKnowledgeBase": "Gebruik agentische retrieval van Azure AI Search voor meervoudige query-planning. Gebruikt altijd semantische rangschikking.",
         "useWebSource": "Breid retrieval uit met websearch resultaten naast je geïndexeerde dataset.",
         "useSharePointSource": "Breid retrieval uit met SharePoint-inhoud naast je geïndexeerde dataset."
     },

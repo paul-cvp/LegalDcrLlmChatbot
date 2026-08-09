@@ -7,6 +7,7 @@ from approaches.chat_interface import ChatWithHistory
 from approaches.dcr_chat import DcrChat
 from approaches.llm_chat import LLMChat
 from approaches.llm_dcr_controller import LLMDcrControllerChat
+from approaches.llm_rag_chat import LLMRagChat
 from object.domain import (
     ChatHistoryEntry,
     ChatOption,
@@ -15,6 +16,8 @@ from object.domain import (
     ChatType,
     DcrChatRequest,
     DcrChatResponse,
+    DcrControllerChatResponse,
+    RagChatResponse,
 )
 from object.errors import NotFoundError
 
@@ -25,6 +28,7 @@ class ChatController:
         ChatType.LLM_CHAT: LLMChat,
         ChatType.DCR_CHAT: DcrChat,
         ChatType.DCR_CONTROLLER_CHAT: LLMDcrControllerChat,
+        ChatType.RAG_CHAT: LLMRagChat,
     }
 
     def __init__(self) -> None:
@@ -66,7 +70,12 @@ class ChatController:
 
     async def create_response(
         self, request: ChatSessionRequest|DcrChatRequest
-    ) -> ChatSessionResponse|DcrChatResponse:
+    ) -> (
+        ChatSessionResponse
+        | DcrChatResponse
+        | DcrControllerChatResponse
+        | RagChatResponse
+    ):
         if request.session_id is not None:
             session_id = request.session_id
             chat = self._get_session(session_id)
@@ -82,5 +91,7 @@ class ChatController:
         if request.session_id is None:
             # Only successful first responses register a session.
             self._sessions[session_id] = chat
-        response.session_id = session_id
-        return response
+        if isinstance(response, ChatSessionResponse):
+            response.session_id = session_id
+            return response
+        return ChatSessionResponse(text=response.text, session_id=session_id)

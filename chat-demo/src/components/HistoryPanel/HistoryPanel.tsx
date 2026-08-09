@@ -26,10 +26,14 @@ export const HistoryPanel = ({
     const [history, setHistory] = useState<HistoryMetaData[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [hasMoreHistory, setHasMoreHistory] = useState(false);
+    const loadingRef = useRef(false);
+    const loadGenerationRef = useRef(0);
 
     useEffect(() => {
         if (!isOpen) return;
         if (notify) {
+            loadGenerationRef.current += 1;
+            loadingRef.current = false;
             setHistory([]);
             historyManager.resetContinuationToken();
             setHasMoreHistory(true);
@@ -37,13 +41,26 @@ export const HistoryPanel = ({
     }, [isOpen, notify]);
 
     const loadMoreHistory = async () => {
-        setIsLoading(() => true);
-        const items = await historyManager.getNextItems(HISTORY_COUNT_PER_LOAD);
-        if (items.length === 0) {
-            setHasMoreHistory(false);
+        if (loadingRef.current) return;
+
+        loadingRef.current = true;
+        const generation = loadGenerationRef.current;
+        setIsLoading(true);
+        try {
+            const items = await historyManager.getNextItems(HISTORY_COUNT_PER_LOAD);
+            if (generation !== loadGenerationRef.current) return;
+
+            setHasMoreHistory(items.length === HISTORY_COUNT_PER_LOAD);
+            setHistory(previous => {
+                const loadedIds = new Set(previous.map(item => item.id));
+                return [...previous, ...items.filter(item => !loadedIds.has(item.id))];
+            });
+        } finally {
+            if (generation === loadGenerationRef.current) {
+                loadingRef.current = false;
+                setIsLoading(false);
+            }
         }
-        setHistory(prevHistory => [...prevHistory, ...items]);
-        setIsLoading(() => false);
     };
 
     const handleSelect = async (id: string) => {
@@ -63,7 +80,10 @@ export const HistoryPanel = ({
     const { t } = useTranslation();
 
     const handleClose = () => {
+        loadGenerationRef.current += 1;
+        loadingRef.current = false;
         setHistory([]);
+        setIsLoading(false);
         setHasMoreHistory(true);
         historyManager.resetContinuationToken();
         onClose();

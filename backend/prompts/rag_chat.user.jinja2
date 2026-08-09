@@ -1,0 +1,22 @@
+Conversation history:
+{% for entry in history %}
+{{ entry.chat_role }}: {{ entry.item }}
+{% else %}
+No previous messages.
+{% endfor %}
+
+Latest question:
+{{ query }}
+
+Retrieved evidence:
+{% for item in evidence %}
+{{ item.citation }} Index: {{ item.index.value }}{% if item.outcome %}; Outcome: {{ item.outcome }}{% endif %}
+{{ item.excerpt }}
+
+{% else %}
+{% if indexes_selected %}
+The selected source indexes returned no evidence.
+{% else %}
+No evidence was retrieved because no source index was selected.
+{% endif %}
+{% endfor %}

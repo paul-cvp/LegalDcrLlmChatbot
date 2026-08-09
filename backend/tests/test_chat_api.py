@@ -19,8 +19,10 @@ def test_chat_with_history_stores_ordered_request_response_pairs():
     asyncio.run(chat.run("second"))
 
     assert [entry.model_dump() for entry in chat.get_history()] == [
-        {"request": "first", "response": "first"},
-        {"request": "second", "response": "second"},
+        {"item": "first", "chat_role": "user", "dcr_role": None, "metadata": None},
+        {"item": "first", "chat_role": "assistant", "dcr_role": None, "metadata": None},
+        {"item": "second", "chat_role": "user", "dcr_role": None, "metadata": None},
+        {"item": "second", "chat_role": "assistant", "dcr_role": None, "metadata": None},
     ]
 
 
@@ -41,8 +43,10 @@ def test_controller_creates_and_continues_an_isolated_session():
     assert second.session_id == first.session_id
     history = controller.get_history(first.session_id)
     assert [entry.model_dump() for entry in history] == [
-        {"request": "first", "response": "first"},
-        {"request": "second", "response": "second"},
+        {"item": "first", "chat_role": "user", "dcr_role": None, "metadata": None},
+        {"item": "first", "chat_role": "assistant", "dcr_role": None, "metadata": None},
+        {"item": "second", "chat_role": "user", "dcr_role": None, "metadata": None},
+        {"item": "second", "chat_role": "assistant", "dcr_role": None, "metadata": None},
     ]
 
 
@@ -55,13 +59,13 @@ def test_controller_keeps_session_histories_separate():
     )
     second_session = asyncio.run(
         controller.create_response(
-            ChatSessionRequest(text="other", chat_type=ChatType.DCR_CHAT)
+            ChatSessionRequest(text="other", chat_type=ChatType.TEST_CHAT)
         )
     )
 
     assert first_session.session_id != second_session.session_id
-    assert controller.get_history(first_session.session_id)[0].request == "first"
-    assert controller.get_history(second_session.session_id)[0].request == "other"
+    assert controller.get_history(first_session.session_id)[0].item == "first"
+    assert controller.get_history(second_session.session_id)[0].item == "other"
 
 
 def test_controller_deletes_the_session_and_its_history():
@@ -105,6 +109,7 @@ def test_chat_controller_registers_all_approaches():
         ChatType.LLM_CHAT: "LLMChat",
         ChatType.DCR_CHAT: "DcrChat",
         ChatType.DCR_CONTROLLER_CHAT: "LLMDcrControllerChat",
+        ChatType.RAG_CHAT: "LLMRagChat",
     }
 
 
@@ -171,6 +176,7 @@ def test_chat_api_session_lifecycle_and_validation():
         {"name": "LLM_CHAT", "value": 0},
         {"name": "DCR_CHAT", "value": 1},
         {"name": "DCR_CONTROLLER_CHAT", "value": 2},
+        {"name": "RAG_CHAT", "value": 3},
     ]
     assert invalid.status_code == 422
     assert first.status_code == 200
@@ -181,8 +187,10 @@ def test_chat_api_session_lifecycle_and_validation():
         "session_id": first.json()["session_id"],
     }
     assert history.json() == [
-        {"request": "first", "response": "first"},
-        {"request": "second", "response": "second"},
+        {"item": "first", "chat_role": "user", "dcr_role": None, "metadata": None},
+        {"item": "first", "chat_role": "assistant", "dcr_role": None, "metadata": None},
+        {"item": "second", "chat_role": "user", "dcr_role": None, "metadata": None},
+        {"item": "second", "chat_role": "assistant", "dcr_role": None, "metadata": None},
     ]
     assert deleted.status_code == 204
     assert missing_history.status_code == 404

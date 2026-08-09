@@ -61,12 +61,19 @@ class LocalDcrGraphSearch(LocalDocumentSearch):
         self._ready = False
         super().ensure_index(rebuild=rebuild)
 
-    def search(self, query: str, top_k: int = 5) -> list[RelevantDcrGraphResult]:
+    def search(
+        self,
+        query: str,
+        top_k: int = 5,
+        graph_format: Literal["xml", "json"] | None = None,
+    ) -> list[RelevantDcrGraphResult]:
         if top_k < 1:
             raise ValueError("top_k must be at least 1.")
         results = []
         seen_sources = set()
         for record, score in self._rank_records(query):
+            if graph_format is not None and record["format"] != graph_format:
+                continue
             source = record["source"]
             if source in seen_sources:
                 continue

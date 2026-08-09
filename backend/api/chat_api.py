@@ -10,6 +10,8 @@ from object.domain import (
     ChatSessionResponse,
     DcrChatResponse,
     DcrChatRequest,
+    DcrControllerChatResponse,
+    RagChatResponse,
     SessionRequest,
 )
 from object.errors import NotFoundError, ValidationError
@@ -42,8 +44,23 @@ async def delete_chat_session(request: SessionRequest) -> Response:
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.post("/response", response_model=ChatSessionResponse|DcrChatResponse)
-async def get_response(request: ChatSessionRequest|DcrChatRequest) -> ChatSessionResponse|DcrChatResponse:
+@router.post(
+    "/response",
+    response_model=(
+        ChatSessionResponse
+        | DcrChatResponse
+        | DcrControllerChatResponse
+        | RagChatResponse
+    ),
+)
+async def get_response(
+    request: ChatSessionRequest | DcrChatRequest,
+) -> (
+    ChatSessionResponse
+    | DcrChatResponse
+    | DcrControllerChatResponse
+    | RagChatResponse
+):
     try:
         return await controller.create_response(request)
     except NotFoundError as error:

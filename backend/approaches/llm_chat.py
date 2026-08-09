@@ -22,5 +22,6 @@ class LLMChat(ChatWithHistory):
             llm_message,
             history=self.get_history(),
         )
-        self.record_response(normalized_request, response)
+        self.record_response(str(normalized_request.text), "user")
+        self.record_response(response.text, "assistant")
         return response

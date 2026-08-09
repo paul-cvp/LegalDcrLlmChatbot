@@ -8,15 +8,11 @@ import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
 
 import styles from "./Answer.module.css";
-import { ChatAppResponse, getCitationFilePath, SpeechConfig } from "../../api";
+import { ChatAppResponse, getCitationFilePath } from "../../api";
 import { parseAnswerToHtml } from "./AnswerParser";
-import { AnswerIcon } from "./AnswerIcon";
-import { SpeechOutputBrowser } from "./SpeechOutputBrowser";
 
 interface Props {
     answer: ChatAppResponse;
-    index: number;
-    speechConfig: SpeechConfig;
     isSelected?: boolean;
     isStreaming: boolean;
     onCitationClicked: (filePath: string) => void;
@@ -24,21 +20,17 @@ interface Props {
     onSupportingContentClicked: () => void;
     onFollowupQuestionClicked?: (question: string) => void;
     showFollowupQuestions?: boolean;
-    showSpeechOutputBrowser?: boolean;
 }
 
 export const Answer = ({
     answer,
-    index,
-    speechConfig,
     isSelected,
     isStreaming,
     onCitationClicked,
     onThoughtProcessClicked,
     onSupportingContentClicked,
     onFollowupQuestionClicked,
-    showFollowupQuestions,
-    showSpeechOutputBrowser
+    showFollowupQuestions
 }: Props) => {
     const followupQuestions = answer.context?.followup_questions;
     const parsedAnswer = useMemo(() => parseAnswerToHtml(answer, isStreaming, onCitationClicked), [answer, isStreaming, onCitationClicked]);
@@ -68,8 +60,7 @@ export const Answer = ({
             style={{ display: "flex", flexDirection: "column", justifyContent: "space-between" }}
         >
             <div>
-                <div style={{ display: "flex", justifyContent: "space-between" }}>
-                    <AnswerIcon />
+                <div style={{ display: "flex", justifyContent: "flex-end" }}>
                     <div>
                         <Button
                             appearance="transparent"
@@ -97,7 +88,6 @@ export const Answer = ({
                             onClick={() => onSupportingContentClicked()}
                             disabled={!answer.context.data_points || isStreaming}
                         />
-                        {showSpeechOutputBrowser && <SpeechOutputBrowser answer={sanitizedAnswerHtml} />}
                     </div>
                 </div>
             </div>

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import IntEnum
+from enum import Enum, IntEnum
 from typing import Literal
 from uuid import UUID
 from pm4py.objects.dcr.ocdcr.obj import DcrGraph
@@ -31,16 +31,27 @@ class ChatType(IntEnum):
     LLM_CHAT = 0
     DCR_CHAT = 1
     DCR_CONTROLLER_CHAT = 2
+    RAG_CHAT = 3
+
+
+class RagSearchIndex(str, Enum):
+    RELEVANT_LAWS = "find_relevant_laws"
+    SIMILAR_CASES = "find_similar_cases"
+
+
+class RagChatMetadata(BaseModel):
+    search_indexes: list[RagSearchIndex] = Field(default_factory=list)
+    generate_followups: bool = False
 
 
 class ChatRequest(BaseModel):
     text: str|int|bool
     chat_type: ChatType | None = None
+    metadata: RagChatMetadata | None = None
 
 
 class ChatResponse(BaseModel):
     text: str
-
 
 class DocumentListItem(BaseModel):
     filename: str
@@ -64,6 +75,19 @@ class SessionRequest(BaseModel):
 class ChatSessionResponse(ChatResponse):
     session_id: UUID | None = None
 
+class RagEvidence(BaseModel):
+    index: RagSearchIndex
+    source: str
+    page: int
+    citation: str
+    excerpt: str
+    score: float
+    outcome: str | None = None
+
+
+class RagChatResponse(ChatSessionResponse):
+    follow_up_questions: list[str]
+    evidence: list[RagEvidence]
 
 class DcrChatRequest(ChatSessionRequest):
     graph_xml: str | None = None
@@ -75,6 +99,18 @@ class DcrChatResponse(ChatSessionResponse):
     graph_xml: str | None = None
     act_id: str | None = None
     dcr_role: str | None = None
+
+
+class DcrGraphCandidate(BaseModel):
+    graph_id: str
+    source: str
+    format: Literal["xml", "json"]
+    score: float
+    excerpt: str
+
+
+class DcrControllerChatResponse(ChatSessionResponse):
+    graphs: list[DcrGraphCandidate]
 
 class ChatHistoryEntry(BaseModel):
     item: str

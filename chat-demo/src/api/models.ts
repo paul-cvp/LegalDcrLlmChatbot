@@ -4,7 +4,12 @@ export const enum RetrievalMode {
     Text = "text"
 }
 
+export type DcrRole = "Citizen" | "Caseworker";
+export type SearchIndex = "All" | "Relevant laws" | "Similar cases";
+
 export type ChatAppRequestOverrides = {
+    dcr_role?: DcrRole;
+    search_index?: SearchIndex;
     retrieval_mode?: RetrievalMode;
     semantic_ranker?: boolean;
     semantic_captions?: boolean;
@@ -117,7 +122,6 @@ export type Config = {
     showVectorOption: boolean;
     showLanguagePicker: boolean;
     showSpeechInput: boolean;
-    showSpeechOutputBrowser: boolean;
     showChatHistoryBrowser: boolean;
     showAgenticRetrievalOption: boolean;
     ragSearchTextEmbeddings: boolean;
@@ -127,11 +131,3 @@ export type Config = {
     webSourceEnabled: boolean;
     sharepointSourceEnabled: boolean;
 };
-
-export interface SpeechConfig {
-    speechUrls: (string | null)[];
-    setSpeechUrls: (urls: (string | null)[]) => void;
-    audio: HTMLAudioElement;
-    isPlaying: boolean;
-    setIsPlaying: (isPlaying: boolean) => void;
-}

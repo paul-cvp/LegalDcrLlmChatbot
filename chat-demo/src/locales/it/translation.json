@@ -33,17 +33,17 @@
     "chatEmptyStateTitle": "Chatta con i tuoi dati",
     "chatEmptyStateSubtitle": "Chiedi qualsiasi cosa o prova un esempio",
     "defaultExamples": {
-        "1": "Cosa è incluso nel mio piano Northwind Health Plus che non è nello standard?",
-        "2": "Cosa succede durante una valutazione delle prestazioni?",
-        "3": "Cosa fa un Product Manager?",
-        "placeholder": "Digita una nuova domanda (es. il mio piano copre gli esami oculistici annuali?)"
+        "1": "Quando ho diritto all'indennità per assistere un figlio malato sotto i 18 anni?",
+        "2": "Come viene ridotta l'indennità parziale quando mio figlio riceve altra supervisione?",
+        "3": "Quali documenti servono per le indennità di assistenza o formazione?",
+        "placeholder": "Scrivi una domanda sulle indennità di assistenza o formazione"
     },
     "askTitle": "Chiedi ai tuoi dati",
     "multimodalExamples": {
-        "1": "Confronta l'impatto dei tassi di interesse e del PIL sui mercati finanziari.",
-        "2": "Qual è la tendenza prevista per l'indice S&P 500 nei prossimi cinque anni? Confrontalo con le performance passate dell'S&P 500",
-        "3": "Puoi identificare una correlazione tra i prezzi del petrolio e le tendenze del mercato azionario?",
-        "placeholder": "Esempio: Il mio piano copre gli esami oculistici annuali?"
+        "1": "Quando ho diritto all'indennità per assistere un figlio malato sotto i 18 anni?",
+        "2": "Come viene ridotta l'indennità parziale quando mio figlio riceve altra supervisione?",
+        "3": "Quali documenti servono per le indennità di assistenza o formazione?",
+        "placeholder": "Esempio: quali documenti devo presentare per l'indennità di assistenza?"
     },
     "generatingAnswer": "Generazione della risposta",
     "citationWithColon": "Citazione:",
@@ -55,7 +55,6 @@
         "stopRecording": "Interrompi la registrazione della domanda",
         "showThoughtProcess": "Mostra il processo di pensiero",
         "showSupportingContent": "Mostra contenuto di supporto",
-        "speakAnswer": "Parla risposta",
         "info": "Info",
         "save": "Salva",
         "copy": "Copia",
@@ -71,6 +70,17 @@
         "languagePicker": "Seleziona la tua lingua",
         "headerText": "Configura la generazione delle risposte",
         "closeButton": "Chiudi",
+        "dcrRole": "Ruolo DCR",
+        "dcrRoleOptions": {
+            "Citizen": "Cittadino",
+            "Caseworker": "Responsabile del caso"
+        },
+        "searchIndex": "Indice di ricerca",
+        "searchIndexOptions": {
+            "all": "Tutti",
+            "relevantLaws": "Leggi pertinenti",
+            "similarCases": "Casi simili"
+        },
         "promptTemplate": "Modello di prompt",
         "temperature": "Temperatura",
         "minimumSearchScore": "Punteggio minimo di ricerca",
@@ -99,7 +109,7 @@
             "high": "Alto",
             "xhigh": "Extra alto"
         },
-        "useSuggestFollowupQuestions": "Suggerisci domande di follow-up",
+        "useSuggestFollowupQuestions": "Includi domande di follow-up",
         "useAgenticKnowledgeBase": "Usa il recupero agentico",
         "useWebSource": "Includi ricerca web",
         "useSharePointSource": "Includi la sorgente SharePoint",
@@ -129,24 +139,20 @@
     "helpTexts": {
         "promptTemplate": "Sostituisce il prompt utilizzato per generare la risposta in base alla domanda e ai risultati della ricerca. Per aggiungere al prompt esistente invece di sostituire l'intero prompt, inizia il tuo prompt con '>>>'.",
         "temperature": "Imposta la temperatura della query al Grande Modello di Linguaggio (LLM) che genera la risposta. Temperature più alte producono risposte più creative, ma possono essere meno ancorate.",
-        "searchScore": "Imposta un punteggio minimo per i risultati di ricerca provenienti da Azure AI Search. L'intervallo di punteggi dipende se si utilizza l'ibrido (predefinito), solo vettori, o solo testo.",
+        "searchScore": "Imposta il punteggio minimo di pertinenza che un risultato deve raggiungere.",
         "rerankerScore": "Imposta un punteggio minimo per i risultati di ricerca provenienti dal reranker semantico. Il punteggio varia sempre tra 0 e 4. Più alto è il punteggio, più il risultato è semanticamente rilevante rispetto alla domanda.",
-        "retrieveNumber": "Imposta il numero di risultati di ricerca da recuperare da Azure AI Search. Più risultati possono aumentare la probabilità di trovare la risposta giusta, ma possono portare il modello a 'perdersi nel mezzo'.",
+        "retrieveNumber": "Imposta il numero di risultati da recuperare. Più risultati possono migliorare la copertura, ma aggiungere contesto meno pertinente.",
         "agenticReasoningEffort": "Controlla quanto ragionamento applica l'agente durante la creazione di piani multi-query. Uno sforzo maggiore può migliorare il richiamo ma aumenta token e latenza.",
         "includeCategory": "Specifica una categoria da includere nei risultati di ricerca. Non ci sono categorie utilizzate nel set di dati predefinito.",
         "excludeCategory": "Specifica una categoria da escludere dai risultati di ricerca. Non ci sono categorie utilizzate nel set di dati predefinito.",
-        "useSemanticReranker": "Abilita il ranking semantico di Azure AI Search, un modello che riordina i risultati di ricerca in base alla somiglianza semantica con la query dell'utente.",
         "useSemanticCaptions": "Invia didascalie semantiche all'LLM invece del risultato di ricerca completo. Una didascalia semantica è estratta da un risultato di ricerca durante il processo di ranking semantico.",
-        "useQueryRewriting": "Abilita la riscrittura delle query di Azure AI Search, un processo che modifica la query dell'utente per migliorare i risultati di ricerca. Richiede che il reranker semantico sia abilitato.",
         "reasoningEffort": "Imposta lo sforzo di ragionamento per l'LLM. Valori più alti comportano un maggiore ragionamento, ma potrebbero richiedere più tempo per generare una risposta. Il valore predefinito è medio.",
         "suggestFollowupQuestions": "Chiede all'LLM di suggerire domande di follow-up in base alla query dell'utente.",
         "textEmbeddings": "Quando selezionato, la ricerca utilizzerà le incorporazioni dal modello di incorporazioni solo testo dei frammenti di testo estratti.",
         "imageEmbeddings": "Quando selezionato, la ricerca utilizzerà le incorporazioni dal modello di incorporazioni multimodale delle immagini estratte.",
         "llmTextInputs": "Quando selezionato, il contenuto testuale dei risultati di ricerca viene inviato all'LLM come contesto.",
         "llmImageInputs": "Quando selezionato, le immagini dai risultati di ricerca vengono inviate all'LLM come contesto.",
-        "retrievalMode": "Imposta la modalità di recupero per la query Azure AI Search. Vettori + Testo (Ibrido) utilizza una combinazione di ricerca vettoriale e ricerca full-text, Vettori utilizza solo la ricerca vettoriale, e Testo utilizza solo la ricerca full-text. Ibrido è generalmente ottimale.",
         "streamChat": "Trasmette in streaming la risposta all'interfaccia utente della chat man mano che viene generata.",
-        "useAgenticKnowledgeBase": "Usa l'agentic retrieval da Azure AI Search per la pianificazione multi-query. Usa sempre il ranking semantico.",
         "useWebSource": "Arricchisci i risultati con la ricerca web in aggiunta al tuo set di dati indicizzati.",
         "useSharePointSource": "Arricchisci il recupero con contenuto SharePoint insieme al tuo set di dati indicizzati."
     },

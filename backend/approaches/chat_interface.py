@@ -30,8 +30,8 @@ class ChatWithHistory:
 
         response = ChatResponse(text=normalized_request.text)
 
-        self.record_response(item=normalized_request, chat_role="user")
-        self.record_response(item=response, chat_role="assistant")
+        self.record_response(item=str(normalized_request.text), chat_role="user")
+        self.record_response(item=response.text, chat_role="assistant")
         return response
 
     def record_response(

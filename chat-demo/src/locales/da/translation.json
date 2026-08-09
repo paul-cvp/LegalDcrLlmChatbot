@@ -33,17 +33,17 @@
     "chatEmptyStateTitle": "Chat med dine data",
     "chatEmptyStateSubtitle": "Spørg om hvad som helst eller prøv et eksempel",
     "defaultExamples": {
-        "1": "Hvad er inkluderet i min Northwind Health Plus plan, som ikke er i standardplanen?",
-        "2": "Hvordan foregår en medarbejderevaluering?",
-        "3": "Hvad laver en produktchef?",
-        "placeholder": "Skriv et nyt spørgsmål (f.eks. dækker min plan årlige øjenundersøgelser?)"
+        "1": "Hvornår har jeg ret til plejeorlovsydelse for et sygt barn under 18 år?",
+        "2": "Hvordan reduceres graderede plejeydelser, når mit barn har andet tilsyn?",
+        "3": "Hvilken dokumentation kræves for pleje- eller oplæringsydelser?",
+        "placeholder": "Skriv et spørgsmål om pleje- eller oplæringsydelser"
     },
     "askTitle": "Spørg til dine data",
     "multimodalExamples": {
-        "1": "Sammenlign effekten af renter og BNP på finansmarkederne.",
-        "2": "Hvad er den forventede tendens for S&P 500 indekset over de næste fem år? Sammenlign det med tidligere S&P 500 præstation.",
-        "3": "Kan du identificere nogen korrelation mellem oliepriser og aktiemarkedets tendenser?",
-        "placeholder": "Eksempel: Dækker min plan årlige øjenundersøgelser?"
+        "1": "Hvornår har jeg ret til plejeorlovsydelse for et sygt barn under 18 år?",
+        "2": "Hvordan reduceres graderede plejeydelser, når mit barn har andet tilsyn?",
+        "3": "Hvilken dokumentation kræves for pleje- eller oplæringsydelser?",
+        "placeholder": "Eksempel: Hvilken dokumentation skal jeg indsende for plejeydelser?"
     },
     "generatingAnswer": "Genererer svar",
     "citationWithColon": "Kilder:",
@@ -55,7 +55,6 @@
         "stopRecording": "Stop optagelse af spørgsmål",
         "showThoughtProcess": "Vis tankeproces",
         "showSupportingContent": "Vis understøttende indhold",
-        "speakAnswer": "Afspil svar",
         "info": "Info",
         "save": "Gem",
         "copy": "Kopier",
@@ -71,6 +70,17 @@
         "languagePicker": "Vælg sprog",
         "headerText": "Konfigurér svargenerering",
         "closeButton": "Luk",
+        "dcrRole": "DCR-rolle",
+        "dcrRoleOptions": {
+            "Citizen": "Borger",
+            "Caseworker": "Sagsbehandler"
+        },
+        "searchIndex": "Søgeindeks",
+        "searchIndexOptions": {
+            "all": "Alle",
+            "relevantLaws": "Relevante love",
+            "similarCases": "Lignende sager"
+        },
         "promptTemplate": "Overskriv promptskabelon",
         "temperature": "Temperatur",
         "minimumSearchScore": "Minimum søgescore",
@@ -99,7 +109,7 @@
             "high": "Høj",
             "xhigh": "Ekstra høj"
         },
-        "useSuggestFollowupQuestions": "Foreslå opfølgende spørgsmål",
+        "useSuggestFollowupQuestions": "Medtag opfølgende spørgsmål",
         "useAgenticKnowledgeBase": "Brug agentisk hentning",
         "useWebSource": "Inkludér websøgning",
         "useSharePointSource": "Inkludér SharePoint-kilde",
@@ -129,24 +139,20 @@
     "helpTexts": {
         "promptTemplate": "Overskriver prompten brugt til at generere svaret baseret på spørgsmålet og søgeresultaterne. For at tilføje til eksisterende prompt i stedet for at erstatte hele prompten, start din prompt med '>>>'.",
         "temperature": "Indstiller temperaturen på forespørgslen til LLM'en, der genererer svaret. Højere temperaturer resulterer i mere kreative svar, men de kan være mindre jordnære.",
-        "searchScore": "Indstiller en minimumscore for søgeresultater fra Azure AI Search. Scoreområdet afhænger af, om du bruger hybrid (standard), kun vektorer eller kun tekst.",
+        "searchScore": "Angiver den laveste relevansscore, som et søgeresultat skal opnå.",
         "rerankerScore": "Indstiller en minimumscore for søgeresultater fra den semantiske omrangør. Scoren ligger altid mellem 0-4. Jo højere score, jo mere semantisk relevant er resultatet for spørgsmålet.",
-        "retrieveNumber": "Indstiller antallet af søgeresultater, der skal hentes fra Azure AI Search. Flere resultater kan øge sandsynligheden for at finde det korrekte svar, men kan få modellen til at 'fare vild i midten' (eng: lost in the middle).",
+        "retrieveNumber": "Angiver antallet af søgeresultater. Flere resultater kan forbedre dækningen, men også tilføje mindre relevant kontekst.",
         "agenticReasoningEffort": "Controls how much reasoning the agent applies while building multi-query plans. Higher effort may improve recall but can increase tokens and latency.",
         "includeCategory": "Angiver en kategori, der skal inkluderes i søgeresultaterne. Der er ingen kategorier i det standard datasæt.",
         "excludeCategory": "Angiver en kategori, der skal ekskluderes fra søgeresultaterne. Der er ingen kategorier i det standard datasæt.",
-        "useSemanticReranker": "Aktiverer Azure AI Search semantisk omrangør, en model der rangerer søgeresultater baseret på semantisk lighed til brugerens forespørgsel.",
         "useSemanticCaptions": "Sender semantiske billedtekster til LLM'en i stedet for hele søgeresultatet. En semantisk billedtekst udtrækkes fra et søgeresultat under processen med semantisk rangering.",
-        "useQueryRewriting": "Aktiverer Azure AI Search forespørgselsomskrivning, en proces der ændrer brugerens forespørgsel for at forbedre søgeresultaterne. Kræver at semantisk ranking er aktiveret.",
         "reasoningEffort": "Indstiller ræsonnementsindsatsen for sprogmodellen. Højere værdier resulterer i mere ræsonnement, men kan tage længere tid om at generere et svar. Standardværdien er medium.",
         "suggestFollowupQuestions": "Beder LLM'en om at foreslå opfølgende spørgsmål baseret på brugerens forespørgsel.",
         "textEmbeddings": "Når valgt, vil søgningen bruge indlejringer fra tekst-kun indlejringsmodellen af udtrukne tekstbidder.",
         "imageEmbeddings": "Når valgt, vil søgningen bruge indlejringer fra den multimodale indlejringsmodel af udtrukne billeder.",
         "llmTextInputs": "Når valgt, sendes tekstindhold fra søgeresultaterne til LLM'en som kontekst.",
         "llmImageInputs": "Når valgt, sendes billeder fra søgeresultaterne til LLM'en som kontekst.",
-        "retrievalMode": "Indstiller søgemodus for forespørgslen i Azure AI Search. `Vektorer + Tekst (Hybrid)` bruger en kombination af vektorsøgning og fuldtekstsøgning, `Vektorer` bruger kun vektorsøgning, og `Tekst` bruger kun fuldtekstsøgning. Hybrid er generelt optimalt.",
         "streamChat": "Streamer kontinuerligt svaret til brugergrænsefladen, imens det genereres.",
-        "useAgenticKnowledgeBase": "Brug agentisk hentning fra Azure AI Search til planlægning af flere forespørgsler. Bruger altid semantisk rangering.",
         "useWebSource": "Udvid hentning med websøgeresultater sammen med dit indekserede datasæt.",
         "useSharePointSource": "Udvid hentning med SharePoint-indhold sammen med dit indekserede datasæt."
     },

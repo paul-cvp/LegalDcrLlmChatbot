@@ -16,7 +16,6 @@ class DummyApi {
             showVectorOption: false,
             showLanguagePicker: true,
             showSpeechInput: false,
-            showSpeechOutputBrowser: true,
             showChatHistoryBrowser: true,
             showAgenticRetrievalOption: false,
             ragSearchTextEmbeddings: false,
