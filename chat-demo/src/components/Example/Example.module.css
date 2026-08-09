@@ -1,0 +1,81 @@
+.examplesNavList {
+    list-style: none;
+    padding-left: 1rem;
+    padding-right: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    flex: 0 0 auto;
+    justify-content: center;
+    align-items: stretch;
+    max-width: 64.25rem;
+    width: 100%;
+}
+
+.example {
+    word-break: break-word;
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    cursor: pointer;
+    transition:
+        box-shadow 0.2s ease,
+        border-color 0.2s ease,
+        transform 0.2s ease;
+}
+
+.example:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    border-color: rgba(115, 118, 225, 0.6);
+    transform: translateY(-2px);
+}
+
+.exampleText {
+    margin: 0;
+    font-size: 0.9375rem;
+    padding: 0.875rem 1rem;
+    line-height: 1.5;
+    color: #424242;
+}
+
+.examplesNavList li {
+    display: none;
+}
+
+.examplesNavList li:nth-of-type(1),
+.examplesNavList li:nth-of-type(2),
+.examplesNavList li:nth-of-type(3) {
+    display: block;
+}
+
+@media only screen and (min-width: 600px) {
+    .examplesNavList {
+        flex-direction: row;
+        flex-wrap: nowrap;
+    }
+
+    .examplesNavList li {
+        flex: 1 1 0;
+        min-width: 0;
+    }
+
+    .examplesNavList li:nth-of-type(1),
+    .examplesNavList li:nth-of-type(2),
+    .examplesNavList li:nth-of-type(3) {
+        display: flex;
+    }
+}
+
+@media only screen and (min-width: 992px) {
+    .examplesNavList {
+        gap: 1rem;
+    }
+
+    .exampleText {
+        font-size: 1rem;
+        padding: 1.25rem 1.5rem;
+    }
+}

@@ -1,3 +1,4 @@
+from object.domain import LLMChatRequest
 from pm4py.objects.dcr.ocdcr.obj import DcrActivity, DcrGraph
 from tools.llm import LlmTool
 from util import util
@@ -7,6 +8,12 @@ Interpret the given information and create a relevant question to ask the user.
 You are given details about a DCR Graph event that requires input from the user.
 You must create a simple, appropriate and correct question to ask the user.
 Use the language the user expects; if no language is given, use English.
+"""
+
+ROBOT_PERMISSION_INSTRUCTIONS = """
+Write one brief, explicit yes-or-no question asking whether the Robot may execute
+the activity. Use the language of the recent chat history, or English when it is
+unclear. Mention the activity naturally and return only the permission question.
 """
 
 
@@ -30,3 +37,27 @@ class InterpretOutput(LlmTool):
             dcr_xml={dcr_xml}
         """
         return self.response_text(await self.request_text(input_text))
+
+    async def get_robot_permission_question(self, act: DcrActivity, history) -> str:
+        """Create a concise permission question with enough activity context."""
+        recent_history = "\n".join(
+            f"{entry.chat_role}: {entry.item}" for entry in history
+        ) or "No previous messages."
+        input_text = f"""Robot activity:
+id: {act.ID}
+label: {act.label}
+description: {act.description or ''}
+role: {act.role}
+current data: {act.data!r}
+
+Recent chat history:
+{recent_history}
+"""
+        return self.response_text(
+            await self.request(
+                LLMChatRequest(
+                    text=input_text,
+                    instructions=ROBOT_PERMISSION_INSTRUCTIONS,
+                )
+            )
+        )

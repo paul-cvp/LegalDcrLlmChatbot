@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import IntEnum
+from typing import Literal
 from uuid import UUID
 from pm4py.objects.dcr.ocdcr.obj import DcrGraph
 
@@ -41,6 +42,11 @@ class ChatResponse(BaseModel):
     text: str
 
 
+class DocumentListItem(BaseModel):
+    filename: str
+    title: str
+
+
 class ChatSessionRequest(ChatRequest):
     session_id: UUID | None = None
 
@@ -74,6 +80,7 @@ class ChatHistoryEntry(BaseModel):
     item: str
     chat_role: str
     dcr_role: str | None = None
+    metadata: dict | None = None
 
 
 class ChatOption(BaseModel):
@@ -87,6 +94,15 @@ class LLMChatRequest(ChatRequest):
         validation_alias=AliasChoices("text", "input"),
     )
     instructions: str | None = None
+
+
+class DocumentExtractionPassRequest(LLMChatRequest):
+    phase: Literal["entities", "relations", "data_time"] | None = None
+
+
+class CitizenInformationRequest(BaseModel):
+    text: str = Field(min_length=1)
+    language: Literal["source", "da", "en", "no"] = "source"
 
 @dataclass(frozen=True)
 class LLMSettings:

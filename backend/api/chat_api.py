@@ -12,7 +12,7 @@ from object.domain import (
     DcrChatRequest,
     SessionRequest,
 )
-from object.errors import NotFoundError
+from object.errors import NotFoundError, ValidationError
 
 
 router = APIRouter(prefix="/api/chat", tags=["Chat"])
@@ -48,3 +48,5 @@ async def get_response(request: ChatSessionRequest|DcrChatRequest) -> ChatSessio
         return await controller.create_response(request)
     except NotFoundError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
+    except ValidationError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error

@@ -26,6 +26,8 @@ The frontend is available at <http://localhost:5173/dcr-js> and the API document
 
 The ports can be changed with `BACKEND_PORT` and `FRONTEND_PORT`. Use `DCR_BACKEND_URL` to change the Vite development proxy target, `DCR_MODELS_DIR` to change the model storage directory, and comma-separated `DCR_CORS_ORIGINS` to configure browser origins.
 
+`DCR_ROBOT_AUTO_EXECUTIONS_PER_ACTIVITY` controls automatic Robot activity executions per activity and chat session. It defaults to `1`; use `-1` for unlimited automatic execution, `0` to always ask permission, or a positive integer for that many automatic executions.
+
 ## DCR graph persistence
 
 The dashboard loads saved graphs from the backend when it starts. **Save Graph** updates the selected graph, while **Save Graph As** creates a separate graph and leaves the original unchanged. Persisted XML uses the same formatted editor representation as **Download Editor XML**.

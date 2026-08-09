@@ -38,10 +38,11 @@ class ChatWithHistory:
         self,
         item: str,
         chat_role: str,
-        dcr_role: str = None
+        dcr_role: str = None,
+        metadata: dict = None,
     ) -> None:
         self._history.append(
-            ChatHistoryEntry(item=item, chat_role=chat_role, dcr_role=dcr_role)
+            ChatHistoryEntry(item=item, chat_role=chat_role, dcr_role=dcr_role, metadata=metadata)
         )
 
     def get_last_history_entry(self):

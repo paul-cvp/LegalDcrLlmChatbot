@@ -1,0 +1,45 @@
+.questionInputContainer {
+    border-radius: 0.75rem;
+    box-shadow:
+        0 2px 8px rgba(0, 0, 0, 0.08),
+        0 0 1px rgba(0, 0, 0, 0.08);
+    border: 1px solid #e0e0e0;
+    width: 100%;
+    padding: 0.8rem;
+    background: white;
+}
+
+.questionInputTextArea {
+    width: 100%;
+    max-height: 12rem;
+}
+
+/* Remove v9 Textarea border/background for borderless appearance */
+.questionInputTextArea {
+    border: none !important;
+    overflow: hidden;
+}
+
+.questionInputTextArea textarea {
+    border: none !important;
+    background: transparent !important;
+    outline: none !important;
+    overflow-y: hidden;
+    line-height: 1.5;
+}
+
+.questionInputTextArea::after {
+    border: none !important;
+}
+
+.questionInputButtonsContainer {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+}
+
+@media (min-width: 992px) {
+    .questionInputContainer {
+        /* Allow the container to grow; text area will scroll instead */
+    }
+}
