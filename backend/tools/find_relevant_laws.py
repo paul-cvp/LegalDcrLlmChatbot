@@ -20,14 +20,25 @@ class FindRelevantLaws:
     def find(self, query: str, top_k: int = 5) -> list[SearchResult]:
         return self.search.search(query, top_k=top_k)
 
-    async def answer(self, query: str, top_k: int = 5) -> str:
+    async def answer(
+        self,
+        query: str,
+        user_info: str | None = None,
+        user_data: dict | None = None,
+        top_k: int = 5,
+    ) -> str:
         """Answer a legal question using only locally retrieved excerpts."""
-        print("FindRelevantLaws")
+        print(f"FindRelevantLaws {user_info} {user_data}")
         sources = self.find(query, top_k)
         res = await self._language_model.complete_from_templates(
             "relevant_laws_answer.system.jinja2",
             "relevant_laws_answer.user.jinja2",
-            user_context={"query": query, "sources": sources},
+            user_context={
+                "query": query,
+                "user_info": user_info,
+                "user_data": user_data,
+                "sources": sources,
+            },
         )
         return res
 

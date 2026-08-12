@@ -5,12 +5,16 @@ from pathlib import Path
 from time import perf_counter
 
 from object.domain import (
+    ActivityQuestionsResponse,
     ChatResponse,
     DocumentListItem,
     LLMChatRequest,
 )
 from object.errors import NotFoundError, ValidationError
+from pm4py.objects.dcr.ocdcr.obj import DcrActivity
+from tools.interpret_output import InterpretOutput
 from tools.llm import LlmTool
+from util import util
 from util.localdocumentsearch import DEFAULT_DOCUMENTS_PATH
 
 SYSTEM_PROMPT = """
@@ -31,11 +35,26 @@ LANGUAGE_NAMES = {
     "no": "Norwegian",
 }
 
+ALLOWED_ACTIVITY_ROLES = {"Citizen", "Caseworker", "Robot"}
+
+
 class DocumentsController:
 
-    def __init__(self, documents_path: Path = DEFAULT_DOCUMENTS_PATH) -> None:
+    def __init__(
+        self,
+        documents_path: Path = DEFAULT_DOCUMENTS_PATH,
+        interpret_output: InterpretOutput | None = None,
+    ) -> None:
         self.llm_tool = LlmTool()
         self.documents_path = Path(documents_path)
+        self._interpret_output = interpret_output
+
+    @property
+    def interpret_output(self) -> InterpretOutput:
+        """Create the finalizer only when From Text generation needs it."""
+        if self._interpret_output is None:
+            self._interpret_output = InterpretOutput()
+        return self._interpret_output
 
     def list_documents(self) -> list[DocumentListItem]:
         """Return the PDF corpus using paths relative to the document root."""
@@ -111,6 +130,72 @@ class DocumentsController:
             perf_counter() - started,
         )
         return ChatResponse(text=cleaned)
+
+    async def create_activity_questions(
+        self, graph_xml: str
+    ) -> ActivityQuestionsResponse:
+        """Validate a generated process and rewrite its human activities."""
+        graph = self._import_graph(graph_xml)
+
+        activities = sorted(
+            (
+                element
+                for element in graph.elements
+                if isinstance(element, DcrActivity)
+            ),
+            key=lambda activity: activity.ID,
+        )
+        for activity in activities:
+            if activity.role not in ALLOWED_ACTIVITY_ROLES:
+                raise ValidationError(
+                    f"Activity {activity.ID!r} has unsupported role {activity.role!r}."
+                )
+            if activity.role == "Citizen" and activity.eventData is None:
+                raise ValidationError(
+                    f"Citizen activity {activity.ID!r} must have event data."
+                )
+
+        questions = {}
+        for activity in activities:
+            if activity.role in {"Citizen", "Caseworker"}:
+                questions[activity.ID] = await self.interpret_output.get_activity_question(
+                    activity, graph
+                )
+        return ActivityQuestionsResponse(questions=questions)
+
+    async def create_activity_question(
+        self,
+        graph_xml: str,
+        event_id: str,
+        label: str,
+        role: str,
+        description: str,
+    ) -> ChatResponse:
+        """Generate a question for one activity using the modal's current values."""
+        graph = self._import_graph(graph_xml)
+        activity = next(
+            (
+                element
+                for element in graph.elements
+                if isinstance(element, DcrActivity) and element.ID == event_id
+            ),
+            None,
+        )
+        if activity is None:
+            raise ValidationError(f"Activity {event_id!r} was not found in the process.")
+
+        activity.label = label.strip() or activity.label
+        activity.role = role.strip() or None
+        activity.description = description.strip() or None
+        question = await self.interpret_output.get_activity_question(activity, graph)
+        return ChatResponse(text=question)
+
+    @staticmethod
+    def _import_graph(graph_xml: str):
+        try:
+            return util.import_xml(graph_xml)
+        except (SyntaxError, TypeError, ValueError) as error:
+            raise ValidationError(f"Invalid process XML: {error}") from error
 
     @staticmethod
     def _limit_words(text: str, limit: int) -> str:

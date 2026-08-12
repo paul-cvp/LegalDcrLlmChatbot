@@ -7,14 +7,9 @@ import inspect
 from concurrent.futures import ThreadPoolExecutor
 
 from pm4py.objects.dcr.ocdcr.obj import DcrGraph, DcrElement, DcrParentElement, DcrNesting, DcrSubprocess, DcrSubgraph, DcrSpawnContainer, DcrActivity, DcrRelation, DcrEffect, DcrSpawn, DcrConstraint, RelationType, DcrExpression, DcrComputation, DcrExecution
-from tools.tool_call import ToolCall
 
 
-class DcrSemantics:
-
-    def __init__(self,user_context:str|None=None, use_citizen_data:bool = False) -> None:
-        type(self).uc = user_context
-        type(self).use_citizen_data = use_citizen_data
+class DcrSemanticsNonContextual:
 
     @classmethod
     def getRelations(cls, element: DcrElement, graph: DcrGraph, yields: str=None) -> tuple[Set[DcrRelation], Set[DcrRelation]]:
@@ -108,14 +103,13 @@ class DcrSemantics:
     def parseAttribute(cls, element: str, attribute: str, e3:str = None, e4:str = None) -> any:
         match attribute:
             case "tool":
-                summarizes_graph = (
-                    e3 == "summary"
-                    or (e3 == "graph" and e4 == "executions")
-                )
-                return (
-                    f"cls.resolveAsync(cls.invoke_tool({element}, graph, "
-                    f"{summarizes_graph}))"
-                )
+                if e3 and e4:
+                    # idea is that here we can use any other parts of the graph to add attributes to the tool_call
+                    t = f"[e.activityID for e in {e3}.{e4}]"
+                    h = f"[graph.getActivity(x).data for x in [e.activityID for e in {e3}.{e4}]]"
+                    return "cls.resolveAsync("+ element + f".tool_call({t},{h},{e3}))"
+                else:
+                    return "cls.resolveAsync("+ element + f".tool_call({element}.description))"
             case "id":
                 return element + ".ID"
             case "included":
@@ -144,8 +138,6 @@ class DcrSemantics:
             case (e1, e2, e3, e4):
                 #here we allow for a more advanced tool call with graph.executions
                 return cls.parseAttribute(e1, e2, e3, e4)
-            case (e1, e2, e3):
-                return cls.parseAttribute(e1, e2, e3)
             case (e1, e2):
                 if e1 in ["source", "target"]:
                     return cls.parseAttribute(e1, e2)
@@ -182,50 +174,16 @@ class DcrSemantics:
         # Run outside the already active event loop.
         with ThreadPoolExecutor(max_workers=1) as executor:
             return executor.submit(asyncio.run, result).result()
-
-    @classmethod
-    def invoke_tool(
-        cls,
-        element: DcrActivity,
-        graph: DcrGraph,
-        summarizes_graph: bool = False,
-    ):
-        """Call a persisted tool with arguments matching its registered type."""
-        tool = element.tool_call
-        summarizes_graph = summarizes_graph or (
-            ToolCall.from_callable(tool) is ToolCall.SUMMARIZE_CASE_HISTORY
-        )
-        user_data = []
-        for execution in graph.executions:
-            activity = graph.getActivity(execution.activityID)
-            item = {
-                "label": activity.label,
-                "timestamp": str(execution.time),
-            }
-            if summarizes_graph:
-                item["id"] = execution.activityID
-            if cls.use_citizen_data:
-                item["data"] = activity.data
-            user_data.append(item)
-
-        kwargs = {}
-        if summarizes_graph or cls.use_citizen_data:
-            kwargs["user_data"] = user_data
-        if cls.use_citizen_data:
-            kwargs["user_info"] = cls.uc
-        argument = graph if summarizes_graph else element.description
-        return tool(argument, **kwargs)
     
     @classmethod
     def evaluateComputation(cls, computation: DcrComputation, graph: DcrGraph, source: DcrElement=None, target: DcrElement=None) -> any:
-        # Compile a temporary expression so retained XML guard tokens stay intact. graph is never empty
+        # Compile a temporary expression so retained XML guard tokens stay intact.
         executable = " ".join(
             cls.parseExpression(expression) for expression in computation
         )
         try:
             res = eval(executable)
-        except SyntaxError:
-            # Only statements need exec; runtime failures must retain their cause.
+        except:
             res = exec(executable)
         return res
 

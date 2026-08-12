@@ -42,12 +42,16 @@ class RagSearchIndex(str, Enum):
 class RagChatMetadata(BaseModel):
     search_indexes: list[RagSearchIndex] = Field(default_factory=list)
     generate_followups: bool = False
+    use_chat_history : bool = False
 
+class DcrChatMetadata(BaseModel):
+    use_citizen_data : bool = False
 
 class ChatRequest(BaseModel):
     text: str|int|bool
+    citizen_information: str | None = None
     chat_type: ChatType | None = None
-    metadata: RagChatMetadata | None = None
+    metadata: RagChatMetadata | DcrChatMetadata | None = None
 
 
 class ChatResponse(BaseModel):
@@ -93,6 +97,8 @@ class DcrChatRequest(ChatSessionRequest):
     graph_xml: str | None = None
     act_id: str | None = None
     dcr_role: str | None = None
+    # RobotExecutionPolicy validates the range for both API and environment values.
+    robot_auto_limit: int | None = None
 
 
 class DcrChatResponse(ChatSessionResponse):
@@ -139,6 +145,22 @@ class DocumentExtractionPassRequest(LLMChatRequest):
 class CitizenInformationRequest(BaseModel):
     text: str = Field(min_length=1)
     language: Literal["source", "da", "en", "no"] = "source"
+
+
+class ActivityQuestionsRequest(BaseModel):
+    graph_xml: str = Field(min_length=1)
+
+
+class ActivityQuestionsResponse(BaseModel):
+    questions: dict[str, str]
+
+
+class ActivityQuestionRequest(BaseModel):
+    graph_xml: str = Field(min_length=1)
+    event_id: str = Field(min_length=1)
+    label: str = ""
+    role: str = ""
+    description: str = ""
 
 @dataclass(frozen=True)
 class LLMSettings:

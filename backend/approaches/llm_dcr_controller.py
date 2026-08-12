@@ -19,18 +19,21 @@ from pm4py.objects.dcr.ocdcr.obj import DcrGraph
 from tools.find_relevant_dcr_graphs import FindRelevantDcrGraphs
 
 
+DcrChatFactory = Callable[[DcrGraph, int | None], DcrChat]
+
+
 class LLMDcrControllerChat(ChatWithHistory):
     """Find a DCR graph, then delegate the session to DcrChat."""
 
     def __init__(
         self,
         graph_finder: FindRelevantDcrGraphs | None = None,
-        dcr_chat_factory: Callable[[DcrGraph], DcrChat] | None = None,
+        dcr_chat_factory: DcrChatFactory | None = None,
         top_k: int = 5,
     ) -> None:
         super().__init__()
         self._graph_finder = graph_finder or FindRelevantDcrGraphs()
-        self._dcr_chat_factory = dcr_chat_factory or DcrChat
+        self._dcr_chat_factory = dcr_chat_factory
         self._top_k = top_k
         self._candidates = {}
         self._dcr_chat: DcrChat | None = None
@@ -63,6 +66,7 @@ class LLMDcrControllerChat(ChatWithHistory):
 
         answer = await self._graph_finder.answer(
             text,
+            user_info=normalized_request.citizen_information,
             top_k=self._top_k,
             graph_format="xml",
         )
@@ -96,12 +100,35 @@ class LLMDcrControllerChat(ChatWithHistory):
             graph_xml,
             variant=dcr_importer.DCR_JS_PORTAL,
         )
-        dcr_chat = self._dcr_chat_factory(graph)
+        dcr_chat = (
+            self._dcr_chat_factory(graph, dcr_request.robot_auto_limit)
+            if self._dcr_chat_factory is not None
+            else self._create_dcr_chat(
+                graph,
+                dcr_request.robot_auto_limit,
+                dcr_request.citizen_information,
+                bool(getattr(dcr_request.metadata, "use_citizen_data", False)),
+            )
+        )
         # Carry discovery messages into the process chat's session history.
         dcr_chat.history.extend(self._history)
         dcr_chat.record_response(dcr_request.text, "user", dcr_request.dcr_role)
         self._dcr_chat = dcr_chat
         return await dcr_chat.run(dcr_request)
+
+    @staticmethod
+    def _create_dcr_chat(
+        graph: DcrGraph,
+        robot_auto_limit: int | None,
+        citizen_information: str | None,
+        use_citizen_data: bool,
+    ) -> DcrChat:
+        return DcrChat(
+            graph,
+            robot_auto_limit=robot_auto_limit,
+            user_context=citizen_information,
+            use_citizen_data=use_citizen_data,
+        )
 
     @staticmethod
     def _as_dcr_request(request: ChatRequest) -> DcrChatRequest:

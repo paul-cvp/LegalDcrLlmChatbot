@@ -2,7 +2,7 @@
 
 from typing import override
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from approaches.chat_interface import ChatWithHistory
 from object.domain import (
@@ -23,7 +23,29 @@ class _RagAnswer(BaseModel):
 
 
 class _RagAnswerWithFollowups(_RagAnswer):
-    follow_up_questions: list[str] = Field(min_length=3, max_length=3)
+    follow_up_statements: list[str] = Field(
+        min_length=3,
+        max_length=3,
+        description=(
+            "Exactly three declarative, first-person user intents that can be "
+            "submitted verbatim as retrieval queries."
+        ),
+    )
+
+    @field_validator("follow_up_statements")
+    @classmethod
+    def validate_statements(cls, statements: list[str]) -> list[str]:
+        normalized = [statement.strip() for statement in statements]
+        if any(
+            not statement
+            or any(mark in statement for mark in ("?", "¿", "؟"))
+            or not statement.endswith((".", "。"))
+            for statement in normalized
+        ):
+            raise ValueError(
+                "Follow-up statements must be declarative sentences ending in a period."
+            )
+        return normalized
 
 
 class LLMRagChat(ChatWithHistory):
@@ -55,10 +77,16 @@ class LLMRagChat(ChatWithHistory):
 
         metadata = normalized_request.metadata
         evidence = self._retrieve(normalized_request.text, metadata)
-        completion = await self._complete(normalized_request.text, metadata, evidence)
-        followups = list(getattr(completion, "follow_up_questions", ()))
+        completion = await self._complete(
+            normalized_request.text,
+            metadata,
+            evidence,
+            normalized_request.citizen_information,
+        )
+        followups = list(getattr(completion, "follow_up_statements", ()))
         response = RagChatResponse(
             text=completion.answer,
+            # Preserve the public field name for existing API clients.
             follow_up_questions=followups,
             evidence=evidence,
         )
@@ -90,6 +118,7 @@ class LLMRagChat(ChatWithHistory):
         query: str,
         metadata: RagChatMetadata,
         evidence: list[RagEvidence],
+        citizen_information: str | None = None,
     ) -> _RagAnswer:
         instructions = self.llm_tool.render_template(
             "rag_chat.system.jinja2",
@@ -99,6 +128,7 @@ class LLMRagChat(ChatWithHistory):
         input_text = self.llm_tool.render_template(
             "rag_chat.user.jinja2",
             query=query,
+            citizen_information=citizen_information,
             history=self.get_history(),
             evidence=evidence,
             indexes_selected=bool(metadata.search_indexes),

@@ -29,6 +29,8 @@ class FindRelevantDcrGraphs:
     def find(
         self,
         query: str,
+        user_context: str | None = None,
+        user_data: dict | None = None,
         top_k: int = 5,
         graph_format: Literal["xml", "json"] | None = None,
     ) -> list[RelevantDcrGraphResult]:
@@ -41,13 +43,18 @@ class FindRelevantDcrGraphs:
         query: str,
         top_k: int = 5,
         graph_format: Literal["xml", "json"] | None = "xml",
+        user_info: str | None = None,
     ) -> RelevantDcrGraphsAnswer:
         """Describe the retrieved graphs and retain them for exact selection."""
         graphs = self.find(query, top_k=top_k, graph_format=graph_format)
         text = await self._language_model.complete_from_templates(
             "relevant_dcr_graphs_answer.system.jinja2",
             "relevant_dcr_graphs_answer.user.jinja2",
-            user_context={"query": query, "graphs": graphs},
+            user_context={
+                "query": query,
+                "user_info": user_info,
+                "graphs": graphs,
+            },
         )
         return RelevantDcrGraphsAnswer(text=text, graphs=graphs)
 

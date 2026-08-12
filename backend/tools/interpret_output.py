@@ -25,13 +25,20 @@ class InterpretOutput(LlmTool):
 
     async def get_question(self, act: DcrActivity, dcr: DcrGraph) -> str:
         if act.eventData is None:
-            raise ValueError(f"Activity {act.ID!r} does not define event data.")
+            # Labels are the authoritative user-facing fallback for input-free events.
+            return act.label
+        return await self.get_activity_question(act, dcr)
+
+    async def get_activity_question(self, act: DcrActivity, dcr: DcrGraph) -> str:
+        """Always rewrite a Citizen or Caseworker activity as a question."""
         dcr_xml = util.export_xml(dcr)
+        data_type = act.eventData.data_type.__name__ if act.eventData else "none"
         input_text = f"""Information about the event the question is about:
             event id : {act.ID}
             event label: {act.label}
             event role: {act.role}
-            event expected data type for the answer: {act.eventData.data_type.__name__}
+            event expected data type for the answer: {data_type}
+            {"event description: "+act.description if act.description else ""}
 
             The full Dcr Graph the event is from:
             dcr_xml={dcr_xml}

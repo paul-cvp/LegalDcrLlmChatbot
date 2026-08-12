@@ -5,6 +5,11 @@ Conversation history:
 No previous messages.
 {% endfor %}
 
+{% if citizen_information %}
+Citizen information:
+{{ citizen_information }}
+
+{% endif %}
 Latest question:
 {{ query }}
 

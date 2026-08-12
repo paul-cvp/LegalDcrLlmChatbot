@@ -1,16 +1,13 @@
-Current case record in chronological order (contains legal exerpts and similar cases):
-{% for entry in history %}
-- {{ entry }}
-{% else %}
-- No case record supplied.
-{% endfor %}
+{% if user_info %}
+User information:
+{{ user_info }}
 
-Current case activity trace in chronological order:
-{% for execution in trace %}
-- {{ execution }}
-{% else %}
-- No activity trace supplied.
-{% endfor %}
+{% endif %}
+{% if user_data %}
+Current case activity data in chronological order:
+{{ user_data }}
+
+{% endif %}
 
 DCR process model:
 {{ dcr_xml }}

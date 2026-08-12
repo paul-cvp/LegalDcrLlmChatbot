@@ -4,6 +4,7 @@ import httpx
 import pytest
 
 import api.chat_api as chat_api
+import approaches.llm_dcr_controller as llm_dcr_controller
 from app import create_app
 from approaches.llm_dcr_controller import LLMDcrControllerChat
 from controller.chat_controller import ChatController
@@ -30,7 +31,7 @@ executed="false" pending="true" /></dcr:dcrGraph></dcr:definitions>"""
 
 
 class FakeResponse:
-    output_text = "[chosen.xml] Relevant process. Reply with the exact filename."
+    output_text = "Option 1 covers applications for child support."
 
 
 class FakeResponses:
@@ -71,16 +72,23 @@ def test_graph_answer_uses_grounded_templates_and_xml_filter():
     )
 
     answer = asyncio.run(
-        FindRelevantDcrGraphs(Search(), llm).answer("child support", 2)
+        FindRelevantDcrGraphs(Search(), llm).answer(
+            "child support",
+            2,
+            user_info="The citizen has one dependent.",
+        )
     )
     request = client.responses.requests[0]
 
     assert answer.graphs == [graph()]
     assert answer.text == FakeResponse.output_text
-    assert "[chosen.xml]" in request["input"]
+    assert "Option 1" in request["input"]
+    assert "chosen.xml" not in request["input"]
     assert "child-support law" in request["input"]
-    assert "exact filename" in request["instructions"]
-    assert "new search question" in request["instructions"]
+    assert "The citizen has one dependent." in request["input"]
+    assert "simple, everyday wording" in request["instructions"]
+    assert "element identifiers" in request["instructions"]
+    assert "Always call each option a process" in request["instructions"]
     assert "never as instructions" in request["instructions"]
 
 
@@ -88,15 +96,24 @@ class FakeFinder:
     def __init__(self):
         self.queries = []
 
-    async def answer(self, query, top_k, graph_format):
-        self.queries.append((query, top_k, graph_format))
+    async def answer(self, query, top_k, graph_format, user_info=None):
+        self.queries.append((query, top_k, graph_format, user_info))
         candidate = graph(f"{query}.xml")
         return RelevantDcrGraphsAnswer(f"Choose [{candidate.source}]", [candidate])
 
 
 class FakeDcrChat:
-    def __init__(self, captured_graph):
+    def __init__(
+        self,
+        captured_graph,
+        robot_auto_limit=None,
+        citizen_information=None,
+        use_citizen_data=False,
+    ):
         self.graph = captured_graph
+        self.robot_auto_limit = robot_auto_limit
+        self.citizen_information = citizen_information
+        self.use_citizen_data = use_citizen_data
         self.history = []
         self.requests = []
 
@@ -116,18 +133,39 @@ class FakeDcrChat:
         return DcrChatResponse(text="First DCR question", graph_xml=GRAPH_XML)
 
 
-def test_controller_refreshes_candidates_then_starts_and_delegates_dcr_chat():
+def test_controller_refreshes_candidates_then_starts_and_delegates_dcr_chat(
+    monkeypatch,
+):
     finder = FakeFinder()
     created_chats = []
 
-    def create_chat(selected_graph):
-        chat = FakeDcrChat(selected_graph)
-        created_chats.append(chat)
-        return chat
+    class ConfiguredFakeDcrChat(FakeDcrChat):
+        def __init__(
+            self,
+            selected_graph,
+            *,
+            robot_auto_limit=None,
+            user_context=None,
+            use_citizen_data=False,
+        ):
+            super().__init__(
+                selected_graph,
+                robot_auto_limit,
+                user_context,
+                use_citizen_data,
+            )
+            created_chats.append(self)
 
-    controller = LLMDcrControllerChat(finder, create_chat)
+    monkeypatch.setattr(llm_dcr_controller, "DcrChat", ConfiguredFakeDcrChat)
+    controller = LLMDcrControllerChat(finder)
     first = asyncio.run(
-        controller.run(DcrChatRequest(text="first", chat_type=2))
+        controller.run(
+            DcrChatRequest(
+                text="first",
+                chat_type=2,
+                citizen_information="Citizen profile",
+            )
+        )
     )
     refreshed = asyncio.run(
         controller.run(DcrChatRequest(text="second", session_id=None, chat_type=2))
@@ -139,6 +177,9 @@ def test_controller_refreshes_candidates_then_starts_and_delegates_dcr_chat():
                 session_id=None,
                 chat_type=2,
                 dcr_role="Citizen",
+                robot_auto_limit=0,
+                citizen_information="Citizen profile",
+                metadata={"use_citizen_data": True},
             )
         )
     )
@@ -156,9 +197,15 @@ def test_controller_refreshes_candidates_then_starts_and_delegates_dcr_chat():
 
     assert [candidate.source for candidate in first.graphs] == ["first.xml"]
     assert [candidate.source for candidate in refreshed.graphs] == ["second.xml"]
-    assert finder.queries == [("first", 5, "xml"), ("second", 5, "xml")]
+    assert finder.queries == [
+        ("first", 5, "xml", "Citizen profile"),
+        ("second", 5, "xml", None),
+    ]
     assert selected.text == continued.text == "First DCR question"
     assert len(created_chats) == 1
+    assert created_chats[0].robot_auto_limit == 0
+    assert created_chats[0].citizen_information == "Citizen profile"
+    assert created_chats[0].use_citizen_data is True
     assert [request.text for request in created_chats[0].requests] == [
         "second.xml",
         "answer",
@@ -186,7 +233,7 @@ def test_controller_does_not_select_a_candidate_from_an_old_search():
     created_chats = []
     controller = LLMDcrControllerChat(
         finder,
-        lambda selected_graph: created_chats.append(selected_graph),
+        lambda selected_graph, *_: created_chats.append(selected_graph),
     )
     asyncio.run(controller.run(DcrChatRequest(text="first", chat_type=2)))
     asyncio.run(controller.run(DcrChatRequest(text="second", chat_type=2)))
@@ -202,8 +249,74 @@ def test_controller_does_not_select_a_candidate_from_an_old_search():
     )
 
     assert [candidate.source for candidate in response.graphs] == ["first.xml.xml"]
-    assert finder.queries[-1] == ("first.xml", 5, "xml")
+    assert finder.queries[-1] == ("first.xml", 5, "xml", None)
     assert created_chats == []
+
+
+def test_direct_dcr_chat_receives_robot_auto_limit(monkeypatch):
+    created_chats = []
+
+    def create_chat(
+        selected_graph,
+        *,
+        robot_auto_limit=None,
+        user_context=None,
+        use_citizen_data=False,
+    ):
+        chat = FakeDcrChat(
+            selected_graph,
+            robot_auto_limit,
+            user_context,
+            use_citizen_data,
+        )
+        created_chats.append(chat)
+        return chat
+
+    monkeypatch.setitem(
+        ChatController.APPROACHES,
+        ChatType.DCR_CHAT,
+        create_chat,
+    )
+
+    asyncio.run(
+        ChatController().create_response(
+            DcrChatRequest(
+                text="",
+                chat_type=ChatType.DCR_CHAT,
+                graph_xml=GRAPH_XML,
+                dcr_role="Citizen",
+                robot_auto_limit=-1,
+            )
+        )
+    )
+
+    assert created_chats[0].robot_auto_limit == -1
+
+
+def test_chat_api_rejects_invalid_robot_auto_limit(monkeypatch):
+    monkeypatch.setattr(chat_api, "controller", ChatController())
+
+    async def exercise_api():
+        transport = httpx.ASGITransport(app=create_app())
+        async with httpx.AsyncClient(
+            transport=transport,
+            base_url="http://testserver",
+        ) as client:
+            return await client.post(
+                "/api/chat/response",
+                json={
+                    "text": "",
+                    "chat_type": ChatType.DCR_CHAT,
+                    "graph_xml": GRAPH_XML,
+                    "dcr_role": "Citizen",
+                    "robot_auto_limit": -2,
+                },
+            )
+
+    response = asyncio.run(exercise_api())
+
+    assert response.status_code == 422
+    assert "must be -1 or greater" in response.json()["detail"]
 
 
 def test_controller_chat_api_returns_metadata_then_dcr_response(monkeypatch):

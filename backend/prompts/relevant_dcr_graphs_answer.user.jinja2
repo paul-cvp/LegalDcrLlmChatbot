@@ -1,17 +1,22 @@
+{% if user_info %}
+Citizen information:
+{{ user_info }}
+
+{% endif %}
 Question:
 {{ query }}
 
-Retrieved DCR graphs:
+Available processes:
 {% if graphs %}
 {% for graph in graphs %}
-[{{ graph.source }}]
-Graph ID: {{ graph.graph_id }}
-Relevant graph evidence:
+Option {{ loop.index }}:
+Relevant process information:
 {{ graph.excerpt }}
 
 {% endfor %}
 {% else %}
-No executable XML DCR graphs were retrieved.
+No matching processes were retrieved.
 {% endif %}
 
-Describe the available graphs and how the user can select one.
+Describe the available options and how they relate to the question in simple,
+plain language. Never repeat technical details from the process information.

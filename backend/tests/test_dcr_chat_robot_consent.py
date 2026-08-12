@@ -131,6 +131,81 @@ def test_default_executes_once_then_requests_permission_for_changed_data():
     assert len(instance.trace) == 1
 
 
+@pytest.mark.parametrize("role", ["Citizen", "Caseworker"])
+def test_automatic_execution_reports_metadata_and_graph_update_for_any_role(role):
+    activity = robot()
+    instance = chat(activity)
+
+    response = asyncio.run(
+        instance.run(
+            DcrChatRequest(
+                text="",
+                chat_type=1,
+                dcr_role=role,
+            )
+        )
+    )
+
+    robot_entry = instance.history[0]
+    assert robot_entry.metadata == {
+        "robot_execution": True,
+        "automatic": True,
+        "activity_id": activity.ID,
+        "activity_label": activity.label,
+    }
+    assert response.text == "The process is complete!"
+    assert 'executed="true"' in response.graph_xml
+
+
+def test_all_enabled_robot_activities_report_their_automatic_execution():
+    instance = chat(robot("first"), robot("second"))
+
+    response = asyncio.run(
+        instance.run(
+            DcrChatRequest(text="", chat_type=1, dcr_role="Citizen")
+        )
+    )
+
+    robot_entries = [entry for entry in instance.history if entry.dcr_role == "Robot"]
+    assert len(instance.trace) == 2
+    assert len(robot_entries) == 2
+    assert all(entry.metadata["automatic"] for entry in robot_entries)
+    assert response.text == "The process is complete!"
+
+
+def test_runtime_limit_update_preserves_automatic_execution_count():
+    activity = robot(data="first")
+    instance = chat(activity, limit=1)
+    asyncio.run(instance.present_question_to_user("Citizen"))
+
+    activity.data = "second"
+    asyncio.run(
+        instance.run(
+            DcrChatRequest(
+                text="",
+                session_id="00000000-0000-0000-0000-000000000001",
+                dcr_role="Citizen",
+                robot_auto_limit=2,
+            )
+        )
+    )
+    activity.data = "third"
+    response = asyncio.run(
+        instance.run(
+            DcrChatRequest(
+                text="",
+                session_id="00000000-0000-0000-0000-000000000001",
+                dcr_role="Citizen",
+                robot_auto_limit=2,
+            )
+        )
+    )
+
+    assert instance._robot_policy.automatic_counts[activity.ID] == 2
+    assert len(instance.trace) == 2
+    assert response.act_id == activity.ID
+
+
 def test_unlimited_policy_keeps_automatic_execution_for_new_occurrences():
     activity = robot(data="first")
     instance = chat(activity, limit=-1)
@@ -163,6 +238,13 @@ def test_natural_language_approval_executes_without_consuming_allowance():
     assert len(instance.trace) == 1
     assert instance._robot_policy.automatic_counts[activity.ID] == 0
     assert any("permission True" in entry.item for entry in instance.history)
+    robot_entry = next(entry for entry in instance.history if entry.dcr_role == "Robot")
+    assert robot_entry.metadata == {
+        "robot_execution": True,
+        "automatic": False,
+        "activity_id": activity.ID,
+        "activity_label": activity.label,
+    }
 
 
 def test_denial_suppresses_occurrence_and_allows_enabled_user_activity():
@@ -231,6 +313,31 @@ def test_pending_permission_rejects_other_activity_input():
                 )
             )
         )
+
+
+def test_input_free_user_activity_executes_without_interpretation():
+    activity = DcrActivity(
+        "A1",
+        label="Review application",
+        role="Citizen",
+    )
+    instance = chat(activity)
+
+    asyncio.run(
+        instance.execute_activity_with_chat(
+            DcrChatRequest(
+                text="Continue",
+                session_id="00000000-0000-0000-0000-000000000001",
+                act_id=activity.ID,
+                dcr_role="Citizen",
+            )
+        )
+    )
+
+    assert instance._i_llm_tool.calls == []
+    assert instance.trace[-1].activityID == activity.ID
+    assert instance.trace[-1].input is None
+    assert instance.history[-1].item == "Continue"
 
 
 def test_denied_activity_can_be_requested_after_disable_and_reenable():

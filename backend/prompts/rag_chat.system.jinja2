@@ -11,7 +11,12 @@ source index was consulted, and do not include or invent citations.
 {% endif %}
 Use the language of the latest question and be concise.
 {% if generate_followups %}
-Return exactly three distinct, useful follow-up questions in addition to the answer.
+Return exactly three distinct, useful follow-up statements in addition to the answer.
+Each statement will be submitted verbatim as the user's next document-retrieval query.
+Phrase each as a self-contained, first-person user intent in the language of the latest
+question (for example, "I want to know which documents are required."). Use declarative
+sentences ending in a period, never questions or question marks. Express only an
+information need; do not assert case facts that the user has not provided.
 {% else %}
 Return only the answer.
 {% endif %}

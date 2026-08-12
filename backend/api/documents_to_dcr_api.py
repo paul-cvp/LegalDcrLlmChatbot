@@ -8,6 +8,9 @@ from fastapi.responses import StreamingResponse
 
 from controller.documents_controller import DocumentsController
 from object.domain import (
+    ActivityQuestionRequest,
+    ActivityQuestionsRequest,
+    ActivityQuestionsResponse,
     ChatResponse,
     CitizenInformationRequest,
     DocumentExtractionPassRequest,
@@ -50,3 +53,33 @@ async def create_response(request: DocumentExtractionPassRequest) -> ChatRespons
 @router.post("/citizen-information", response_model=ChatResponse)
 async def create_citizen_information(request: CitizenInformationRequest) -> ChatResponse:
     return await controller.create_citizen_information(request.text, request.language)
+
+
+@router.post("/activity-questions", response_model=ActivityQuestionsResponse)
+async def create_activity_questions(
+    request: ActivityQuestionsRequest,
+) -> ActivityQuestionsResponse:
+    try:
+        return await controller.create_activity_questions(request.graph_xml)
+    except ValidationError as error:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(error),
+        ) from error
+
+
+@router.post("/activity-question", response_model=ChatResponse)
+async def create_activity_question(request: ActivityQuestionRequest) -> ChatResponse:
+    try:
+        return await controller.create_activity_question(
+            request.graph_xml,
+            request.event_id,
+            request.label,
+            request.role,
+            request.description,
+        )
+    except ValidationError as error:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(error),
+        ) from error

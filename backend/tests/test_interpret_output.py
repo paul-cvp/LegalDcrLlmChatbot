@@ -1,10 +1,8 @@
 import asyncio
 
-import pytest
-
 from object.domain import ChatHistoryEntry, LLMSettings
 from pm4py.objects.dcr.ocdcr.obj import DcrActivity, DcrEventData, DcrGraph
-from tools.interpret_output import InterpretOutput
+from tools.interpret_output import INSTRUCTIONS, InterpretOutput
 
 
 class FakeResponse:
@@ -42,12 +40,33 @@ def test_interpret_output_uses_shared_request_handling():
     )
 
 
-def test_interpret_output_requires_event_data():
-    activity = DcrActivity("plain")
+def test_interpret_output_uses_label_without_event_data():
+    activity = DcrActivity("plain", label="Review application")
     tool = InterpretOutput.__new__(InterpretOutput)
 
-    with pytest.raises(ValueError, match="does not define event data"):
-        asyncio.run(tool.get_question(activity, DcrGraph("graph")))
+    question = asyncio.run(tool.get_question(activity, DcrGraph("graph")))
+
+    assert question == "Review application"
+
+
+def test_activity_question_uses_existing_instructions_without_event_data():
+    activity = DcrActivity(
+        "review",
+        label="Review application",
+        description="Check whether the application is complete.",
+        role="Caseworker",
+    )
+    client = FakeClient()
+    settings = LLMSettings("https://example.test", "model", "secret")
+    tool = InterpretOutput(settings=settings, client=client)
+
+    question = asyncio.run(tool.get_activity_question(activity, DcrGraph("graph")))
+
+    assert question == "How old is the child?"
+    assert client.responses.arguments["instructions"] == INSTRUCTIONS
+    assert "event role: Caseworker" in client.responses.arguments["input"]
+    assert "event expected data type for the answer: none" in client.responses.arguments["input"]
+    assert "Check whether the application is complete." in client.responses.arguments["input"]
 
 
 def test_robot_permission_question_includes_activity_and_language_context():

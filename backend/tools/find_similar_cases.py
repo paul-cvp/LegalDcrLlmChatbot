@@ -35,11 +35,13 @@ class FindSimilarCases:
     async def answer(
         self,
         query: str,
+        user_info: str | None = None,
+        user_data: dict | None = None,
         top_k: int = 5,
         top_k_per_outcome: int = 3,
     ) -> str:
         """Compare the current case with closest and outcome-grouped cases."""
-        print("FindSimilarCases")
+        print(f"FindSimilarCases {user_info} {user_data}")
         closest = self.find(query, top_k)
         clusters = self.cluster(query, top_k_per_outcome)
         res = await self._language_model.complete_from_templates(
@@ -47,6 +49,8 @@ class FindSimilarCases:
             "similar_cases_answer.user.jinja2",
             user_context={
                 "query": query,
+                "user_info": user_info,
+                "user_data": user_data,
                 "closest": closest,
                 "clusters": clusters,
             },

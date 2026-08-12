@@ -35,14 +35,18 @@ class RobotExecutionPolicy:
     """Track automatic allowances and consent independently per Robot activity."""
 
     def __init__(self, automatic_limit: int) -> None:
-        if automatic_limit < -1:
-            raise ValidationError(f"{ROBOT_AUTO_EXECUTIONS_ENV} must be -1 or greater.")
-        self.automatic_limit = automatic_limit
+        self.automatic_limit = 0
+        self.set_automatic_limit(automatic_limit)
         self.automatic_counts: Counter[str] = Counter()
         self.pending: RobotOccurrence | None = None
         self._denied: dict[str, RobotOccurrence] = {}
         self._enabled_ids: set[str] = set()
         self._enabled_generations: Counter[str] = Counter()
+
+    def set_automatic_limit(self, automatic_limit: int) -> None:
+        if automatic_limit < -1:
+            raise ValidationError(f"{ROBOT_AUTO_EXECUTIONS_ENV} must be -1 or greater.")
+        self.automatic_limit = automatic_limit
 
     @classmethod
     def from_environment(cls) -> "RobotExecutionPolicy":
@@ -110,10 +114,12 @@ class DcrChat(ChatWithHistory):
         input_interpreter: InterpretInput | None = None,
         output_interpreter: InterpretOutput | None = None,
         robot_auto_limit: int | None = None,
+        user_context: str | None = None,
+        use_citizen_data: bool = False,
     ) -> None:
         super().__init__()
         self._dcr_graph = dcr_graph
-        self._dcr_semantics = DcrSemantics()
+        self._dcr_semantics = DcrSemantics(user_context=user_context,use_citizen_data=use_citizen_data)
         self._enabled_events = set()
         self._enabled_pending = set()
         self._trace = []
@@ -153,15 +159,18 @@ class DcrChat(ChatWithHistory):
             raise ValidationError(
                 "Robot activities can only execute through the Robot permission flow."
             )
-        # act.eventData.coerce()
-        if type(input) == act.eventData.data_type:
+        if act.eventData is None:
+            # Input-free activities execute from the user's acknowledgement.
+            input_interpreted = None
+            self.record_response(item=f"{input}", chat_role="user")
+        elif type(input) == act.eventData.data_type:
             input_interpreted = input
             self.record_response(item=f"{input}", chat_role="user")
         else:
             # LLM to interpret the input as data for the event
             input_interpreted = await self._i_llm_tool.get_closest_match(input, act.eventData.data_type)
             self.record_response(item=f"{input}", chat_role="user")
-            self.record_response(item=f"Interpreted as {input_interpreted}", chat_role="assistant",dcr_role=dcr_role,metadata={"interpreted":True})
+            self.record_response(item=f"Interpreted as {input_interpreted}", chat_role="user",dcr_role=dcr_role,metadata={"interpreted":True})
 
         execution = DcrExecution(act_id, input=input_interpreted, role=dcr_role)
         self._dcr_semantics.executeActivity(execution, self._dcr_graph)
@@ -218,7 +227,12 @@ class DcrChat(ChatWithHistory):
             if activity.role == "Robot"
         ])
 
-    async def execute_robot_activity(self, act: DcrActivity):
+    async def execute_robot_activity(
+        self,
+        act: DcrActivity,
+        *,
+        automatic: bool = False,
+    ) -> bool:
         act_id = act.ID
         if act.data is not None or act.tool_call is not None:
             execution = DcrExecution(act_id, input=act.data, role=act.role)
@@ -226,7 +240,17 @@ class DcrChat(ChatWithHistory):
             self.trace.append(execution)
 
             # normalized_request = self.normalize_request(request)
-            self.record_response(item=f"Robot activity {act.label} answering {act.description} executed with {act.data}", chat_role="assistant", dcr_role="Robot")
+            self.record_response(
+                item=f"Robot activity {act.label} answering {act.description} executed with {act.data}",
+                chat_role="assistant",
+                dcr_role="Robot",
+                metadata={
+                    "robot_execution": True,
+                    "automatic": automatic,
+                    "activity_id": act.ID,
+                    "activity_label": act.label,
+                },
+            )
             LOGGER.info("DCR Chat: Robot activity %s executed", act.ID)
             return True
         else:
@@ -290,7 +314,7 @@ class DcrChat(ChatWithHistory):
                     robo_act.ID,
                 )
                 return robo_act
-            success = await self.execute_robot_activity(robo_act)
+            success = await self.execute_robot_activity(robo_act, automatic=True)
             if success:
                 self._robot_policy.record_automatic_execution(robo_act)
                 await self.refresh_set_of_activities()
@@ -343,7 +367,7 @@ class DcrChat(ChatWithHistory):
                 )
             else:
                 role = act.role
-                question = act.description
+                question = (act.description or "").strip() or None
 
             if not question:
                 q_act = self.get_dcr_activity(id)
@@ -357,6 +381,8 @@ class DcrChat(ChatWithHistory):
             return None
     
     async def run(self, request: DcrChatRequest) -> DcrChatResponse|ChatSessionResponse:
+        if request.robot_auto_limit is not None:
+            self._robot_policy.set_automatic_limit(request.robot_auto_limit)
         pending = self._robot_policy.pending
         if pending is not None:
             if request.act_id != pending.activity_id:

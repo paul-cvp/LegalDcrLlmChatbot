@@ -430,6 +430,66 @@ def test_set_value_semantics_preserves_target_python_type():
     assert type(target.data) is int
 
 
+@pytest.mark.parametrize(
+    "computation",
+    [
+        [("source", "tool", "summary")],
+        [("source", "tool", "graph", "executions")],
+    ],
+)
+def test_summary_tool_computation_receives_graph_and_history(computation):
+    received = {}
+
+    async def summarize(graph, user_info=None, user_data=None):
+        received.update(
+            graph=graph,
+            user_info=user_info,
+            user_data=user_data,
+        )
+        return "Case summary"
+
+    activity = DcrActivity(
+        "summary",
+        label="Summarize case",
+        computation=computation,
+    )
+    activity.tool_call = summarize
+    graph = DcrGraph("case", elements={activity})
+    DcrSemantics(user_context="Citizen context", use_citizen_data=True)
+
+    DcrSemantics.executeActivity(DcrExecution("summary"), graph)
+
+    assert activity.data == "Case summary"
+    assert received["graph"] is graph
+    assert received["user_info"] == "Citizen context"
+    assert received["user_data"][0]["id"] == "summary"
+
+
+def test_registered_summary_tool_with_standard_token_receives_graph(monkeypatch):
+    received = {}
+
+    async def summarize(tool, graph, **kwargs):
+        received.update(tool=tool, graph=graph, **kwargs)
+        return "Case summary"
+
+    monkeypatch.setattr(ToolCall, "__call__", summarize)
+    activity = DcrActivity(
+        "summary",
+        label="Summarize case",
+        computation=[("source", "tool")],
+    )
+    activity.tool_call = ToolCall.SUMMARIZE_CASE_HISTORY
+    graph = DcrGraph("case", elements={activity})
+    DcrSemantics(user_context=None, use_citizen_data=False)
+
+    DcrSemantics.executeActivity(DcrExecution("summary"), graph)
+
+    assert activity.data == "Case summary"
+    assert received["tool"] is ToolCall.SUMMARIZE_CASE_HISTORY
+    assert received["graph"] is graph
+    assert received["user_data"][0]["id"] == "summary"
+
+
 def test_round_trips_activity_definitions_and_tagged_computations():
     activity = DcrActivity(
         "automated",

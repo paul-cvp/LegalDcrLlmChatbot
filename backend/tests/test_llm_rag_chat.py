@@ -1,4 +1,5 @@
 import asyncio
+from pathlib import Path
 
 import httpx
 import pytest
@@ -36,14 +37,21 @@ class FakeLlmTool:
             return f"grounded={context['grounded']}; followups={context['generate_followups']}"
         history = " | ".join(entry.item for entry in context["history"])
         evidence = " | ".join(item.citation for item in context["evidence"])
-        return f"history={history}; query={context['query']}; evidence={evidence}"
+        return (
+            f"history={history}; citizen={context['citizen_information']}; "
+            f"query={context['query']}; evidence={evidence}"
+        )
 
     async def request_structured(self, input_text, instructions, response_model):
         self.requests.append((input_text, instructions, response_model))
-        if "follow_up_questions" in response_model.model_fields:
+        if "follow_up_statements" in response_model.model_fields:
             return response_model(
                 answer="Grounded answer [law.pdf#page=2]",
-                follow_up_questions=["First?", "Second?", "Third?"],
+                follow_up_statements=[
+                    "I want to know the first detail.",
+                    "I want to understand the second detail.",
+                    "I need information about the third detail.",
+                ],
             )
         return response_model(answer="Answer")
 
@@ -70,17 +78,30 @@ def test_rag_chat_searches_both_indexes_and_preserves_evidence():
 
     assert laws.calls == [("Question", 5)]
     assert cases.calls == [("Question", 5)]
-    assert response.follow_up_questions == ["First?", "Second?", "Third?"]
+    assert response.follow_up_questions == [
+        "I want to know the first detail.",
+        "I want to understand the second detail.",
+        "I need information about the third detail.",
+    ]
     followup_schema = llm.requests[0][2].model_json_schema()["properties"][
-        "follow_up_questions"
+        "follow_up_statements"
     ]
     assert followup_schema == {
+        "description": (
+            "Exactly three declarative, first-person user intents that can be "
+            "submitted verbatim as retrieval queries."
+        ),
         "items": {"type": "string"},
         "maxItems": 3,
         "minItems": 3,
-        "title": "Follow Up Questions",
+        "title": "Follow Up Statements",
         "type": "array",
     }
+    with pytest.raises(ValueError, match="declarative sentences"):
+        llm.requests[0][2](
+            answer="Answer",
+            follow_up_statements=["First?", "Second?", "Third?"],
+        )
     assert [item.model_dump(mode="json") for item in response.evidence] == [
         {
             "index": "find_relevant_laws",
@@ -101,6 +122,16 @@ def test_rag_chat_searches_both_indexes_and_preserves_evidence():
             "outcome": "positive",
         },
     ]
+
+
+def test_rag_prompt_requests_retrieval_ready_user_statements():
+    prompt = (
+        Path(__file__).resolve().parents[1] / "prompts" / "rag_chat.system.jinja2"
+    ).read_text(encoding="utf-8")
+
+    assert "submitted verbatim as the user's next document-retrieval query" in prompt
+    assert "never questions or question marks" in prompt
+    assert "do not assert case facts" in prompt
 
 
 @pytest.mark.parametrize(
@@ -157,6 +188,22 @@ def test_rag_chat_passes_previous_turns_to_the_next_completion():
         "Second",
         "Answer",
     ]
+
+
+def test_rag_chat_passes_optional_citizen_information_to_prompt():
+    chat, llm, _, _ = make_chat()
+
+    asyncio.run(
+        chat.run(
+            ChatRequest(
+                text="Question",
+                citizen_information="The citizen has one dependent.",
+                metadata=RagChatMetadata(),
+            )
+        )
+    )
+
+    assert "citizen=The citizen has one dependent." in llm.requests[0][0]
 
 
 def test_rag_chat_api_validates_metadata_and_serializes_response(monkeypatch):

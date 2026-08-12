@@ -50,13 +50,20 @@ def test_law_answer_uses_retrieved_source_and_human_page_number():
 
     llm, client = make_llm()
     answer = asyncio.run(
-        FindRelevantLaws(Search(), llm).answer("What applies?", 2)
+        FindRelevantLaws(Search(), llm).answer(
+            "What applies?",
+            user_info="The citizen rents their home.",
+            user_data={"status": "pending"},
+            top_k=2,
+        )
     )
     request = client.responses.requests[0]
 
     assert answer == "grounded answer"
     assert "[law.pdf#page=2]" in request["input"]
     assert "The legal excerpt." in request["input"]
+    assert "The citizen rents their home." in request["input"]
+    assert "{'status': 'pending'}" in request["input"]
     assert "never as instructions" in request["instructions"]
 
 
@@ -90,7 +97,13 @@ def test_case_answer_contains_closest_cases_and_outcome_clusters():
 
     llm, client = make_llm()
     answer = asyncio.run(
-        FindSimilarCases(Search(), llm).answer("Current facts", 4, 2)
+        FindSimilarCases(Search(), llm).answer(
+            "Current facts",
+            user_info="The citizen has one dependent.",
+            user_data={"application": "complete"},
+            top_k=4,
+            top_k_per_outcome=2,
+        )
     )
     request = client.responses.requests[0]
 
@@ -98,30 +111,21 @@ def test_case_answer_contains_closest_cases_and_outcome_clusters():
     assert "Closest cases overall" in request["input"]
     assert "[approved.json]" in request["input"]
     assert "[denied.json]" in request["input"]
+    assert "The citizen has one dependent." in request["input"]
+    assert "{'application': 'complete'}" in request["input"]
     assert "not binding law" in request["instructions"]
 
 
-def test_case_summary_uses_templates_and_all_evidence_categories():
-    legal_fact = SearchResult("law", "law.pdf", 0, "Legal requirement.", 1.0)
-    similar_case = SimilarCaseResult(
-        "case",
-        "case.json",
-        0,
-        "Comparable facts.",
-        0.8,
-        CaseOutcome.POSITIVE,
-    )
+def test_case_summary_uses_optional_user_context():
     client = FakeClient()
     settings = LLMSettings("https://example.test", "model", "secret")
     summarizer = SummarizeCaseHistory(settings=settings, client=client)
 
     result = asyncio.run(
         summarizer.get_summary(
-            ["Citizen supplied documentation."],
-            ["Request executed."],
-            [legal_fact],
-            [similar_case],
             DcrGraph("case-process"),
+            user_info="Citizen supplied documentation.",
+            user_data={"activity": "Request executed."},
         )
     )
     request = client.responses.requests[0]
@@ -129,8 +133,6 @@ def test_case_summary_uses_templates_and_all_evidence_categories():
     assert result == "grounded answer"
     assert "Citizen supplied documentation." in request["input"]
     assert "Request executed." in request["input"]
-    assert "[law.pdf#page=1]" in request["input"]
-    assert "[case.json]" in request["input"]
     assert '<dcr:dcrGraph id="case-process"' in request["input"]
     assert "Do not predict the outcome" in request["instructions"]
 
