@@ -1,0 +1,209 @@
+import { describe, expect, it } from "vitest";
+
+import type { ChatHistoryEntry, RagEvidence } from "../api/chat";
+import {
+  canonicalizeDcrRole,
+  extractAutomaticRobotExecutions,
+  extractBracketCitations,
+  extractDcrToolEvidence,
+  isRobotActivity,
+  mergeChatHistory,
+  normalizeRagEvidence,
+  resolveGraphDcrRole,
+} from "./normalization";
+
+const GRAPH_XML = `<dcr:definitions xmlns:dcr="http://tk/schema/dcr">
+  <dcr:dcrGraph id="graph">
+    <dcr:event id="case" label="Review" role="Case worker" included="true" />
+    <dcr:event id="law" label="Relevant laws" role="Robot"
+      toolCall="find_relevant_laws" included="true" pending="true" />
+  </dcr:dcrGraph>
+</dcr:definitions>`;
+
+function history(
+  item: string,
+  chatRole = "assistant",
+  dcrRole: string | null = null,
+): ChatHistoryEntry {
+  return { item, chat_role: chatRole, dcr_role: dcrRole, metadata: null };
+}
+
+describe("DCR normalization", () => {
+  it("canonicalizes frontend roles but sends the graph's spelling", () => {
+    expect(canonicalizeDcrRole(" Case worker ")).toBe("Caseworker");
+    expect(resolveGraphDcrRole("Caseworker", GRAPH_XML)).toBe("Case worker");
+    expect(isRobotActivity(GRAPH_XML, "law")).toBe(true);
+    expect(isRobotActivity(GRAPH_XML, "case")).toBe(false);
+  });
+
+  it("normalizes RAG evidence for both analysis panels", () => {
+    const evidence: RagEvidence[] = [{
+      index: "find_relevant_laws",
+      source: "laws/support.pdf",
+      page: 2,
+      citation: "[laws/support.pdf#page=2]",
+      excerpt: "Legal excerpt",
+      score: 0.9,
+      outcome: null,
+    }];
+
+    expect(normalizeRagEvidence(evidence)).toEqual({
+      supportingContent: [{
+        id: "support-rag-0-laws%2Fsupport.pdf-2",
+        title: "support.pdf",
+        content: "Legal excerpt",
+        source: "laws/support.pdf",
+        metadata: {
+          index: "find_relevant_laws",
+          page: 2,
+          score: 0.9,
+          outcome: null,
+        },
+      }],
+      citations: [{
+        id: "citation-rag-0-laws%2Fsupport.pdf-2",
+        title: "support.pdf",
+        source: "laws/support.pdf",
+        page: 2,
+        kind: "law",
+        excerpt: "Legal excerpt",
+      }],
+    });
+  });
+
+  it("diffs Robot tool history and parses its citations", () => {
+    const previous = [history("Question", "user", "Citizen")];
+    const result = "The rule applies [laws/support.pdf#page=4].";
+    const current = [
+      ...previous,
+      history(
+        `Robot activity Relevant laws answering Find law executed with ${result}`,
+        "assistant",
+        "Robot",
+      ),
+    ];
+
+    expect(extractDcrToolEvidence(previous, current, GRAPH_XML)).toEqual([{
+      activityId: "law",
+      historyIndex: 1,
+      toolCall: "find_relevant_laws",
+      text: result,
+      supportingContent: [{
+        id: "dcr-support-1-law",
+        title: "Relevant laws",
+        content: result,
+        metadata: { toolCall: "find_relevant_laws", activityId: "law" },
+      }],
+      citations: [{
+        id: "dcr-1-0-laws%2Fsupport.pdf",
+        title: "support.pdf",
+        source: "laws/support.pdf",
+        page: 4,
+        kind: "law",
+        excerpt: result,
+      }],
+    }]);
+    expect(extractBracketCitations("[case.json] [case.json]")).toEqual([{
+      citation: "[case.json]",
+      source: "case.json",
+      page: undefined,
+    }]);
+  });
+
+  it("diffs automatic Robot executions but ignores Caseworker confirmations", () => {
+    const previous = [history("Start", "user", "Citizen")];
+    const automatic: ChatHistoryEntry = {
+      item: "Robot activity Check law answering request executed with result",
+      chat_role: "assistant",
+      dcr_role: "Robot",
+      metadata: {
+        robot_execution: true,
+        automatic: true,
+        activity_id: "law",
+        activity_label: "Check law",
+      },
+    };
+    const confirmed: ChatHistoryEntry = {
+      ...automatic,
+      item: "Robot activity Check case answering request executed with result",
+      metadata: {
+        robot_execution: true,
+        automatic: false,
+        activity_id: "case",
+        activity_label: "Check case",
+      },
+    };
+
+    expect(extractAutomaticRobotExecutions(previous, [
+      ...previous,
+      automatic,
+      confirmed,
+    ])).toEqual([{
+      activityId: "law",
+      activityLabel: "Check law",
+      historyIndex: 1,
+      message: automatic.item,
+    }]);
+  });
+
+  it("restores rich messages while hiding selected graph filenames", () => {
+    const backendHistory = [
+      history("private.xml", "user", "Citizen"),
+      history("Robot result", "assistant", "Robot"),
+      history("Next question", "assistant", "Citizen"),
+    ];
+    const stored = [{
+      id: "selection",
+      role: "user" as const,
+      content: "Graph description",
+      historyIndex: 0,
+    }, {
+      id: "robot",
+      role: "robot" as const,
+      content: "Robot result",
+      historyIndex: 1,
+      citations: [{ id: "c", title: "Law", source: "law.pdf" }],
+    }];
+
+    const merged = mergeChatHistory(
+      backendHistory,
+      stored,
+      { "private.xml": "Graph description" },
+    );
+
+    expect(merged.map((message) => [message.role, message.content])).toEqual([
+      ["user", "Graph description"],
+      ["robot", "Robot result"],
+      ["assistant", "Next question"],
+    ]);
+    expect(merged[1]?.citations).toHaveLength(1);
+  });
+
+  it("attaches interpreted history metadata to the preceding user answer", () => {
+    const backendHistory: ChatHistoryEntry[] = [
+      history("we shook hands", "user"),
+      {
+        item: "Interpreted as True",
+        chat_role: "assistant",
+        dcr_role: "Citizen",
+        metadata: { interpreted: true },
+      },
+      history("When did this happen?", "assistant", "Citizen"),
+    ];
+
+    const merged = mergeChatHistory(backendHistory);
+
+    expect(merged).toHaveLength(2);
+    expect(merged[0]).toMatchObject({
+      role: "user",
+      content: "we shook hands",
+      interpretedValue: "True",
+      historyIndex: 0,
+    });
+    expect(merged[1]).toMatchObject({
+      role: "assistant",
+      content: "When did this happen?",
+      historyIndex: 2,
+    });
+  });
+});

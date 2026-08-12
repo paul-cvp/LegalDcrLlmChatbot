@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<dcr:definitions xmlns:dcr="http://tk/schema/dcr" xmlns:dcrDi="http://tk/schema/dcrDi" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC">
+  <dcr:dcrGraph id="Graph">
+    <dcr:nesting id="Nesting_1ezkbmp" role="Nesting Title" description="Nesting Description">
+      <dcr:event id="Event_1uzi91u" role="Nested Event 1" description="Description" included="true" executed="false" pending="false" />
+      <dcr:event id="Event_05ips30" role="Nested Event 2" description="Description 2" included="true" executed="false" pending="false" />
+      <dcr:relation id="Link_1ou0upp" type="milestone" sourceRef="Event_1uzi91u" targetRef="Event_05ips30" />
+    </dcr:nesting>
+    <dcr:event id="Event_041zcp8" role="Event outside" description="" included="true" executed="false" pending="false" />
+    <dcr:relation id="Link_0pybfv5" type="condition" sourceRef="Nesting_1ezkbmp" targetRef="Event_041zcp8" />
+    <dcr:relation id="Link_0xdrj56" type="condition" sourceRef="Event_041zcp8" targetRef="Nesting_1ezkbmp" />
+    <dcr:subProcess id="SubProcess_01lm2fg" included="true" executed="false" pending="false" multi-instance="true">
+      <dcr:event id="Event_0kb981x" role="SubProcess Event 1" description="" included="true" executed="false" pending="false" />
+      <dcr:event id="Event_0vztm0v" role="SubProcess Event 2" description="" included="true" executed="false" pending="false" />
+      <dcr:relation id="Link_1r5cywd" type="condition" sourceRef="Event_0kb981x" targetRef="Event_0vztm0v" />
+    </dcr:subProcess>
+    <dcr:relation id="Link_1nv4uol" type="spawn" sourceRef="Event_041zcp8" targetRef="SubProcess_01lm2fg" />
+  </dcr:dcrGraph>
+  <dcrDi:dcrRootBoard id="RootBoard">
+    <dcrDi:dcrPlane id="Plane" boardElement="Graph">
+      <dcrDi:dcrShape id="Nesting_1ezkbmp_di" boardElement="Nesting_1ezkbmp">
+        <dc:Bounds x="150" y="60" width="400" height="280" />
+      </dcrDi:dcrShape>
+      <dcrDi:relation id="Link_1ou0upp_di" boardElement="Link_1ou0upp">
+        <dcrDi:waypoint x="310" y="235" />
+        <dcrDi:waypoint x="360" y="235" />
+      </dcrDi:relation>
+      <dcrDi:dcrShape id="Event_1uzi91u_di" boardElement="Event_1uzi91u">
+        <dc:Bounds x="180" y="160" width="130" height="150" />
+      </dcrDi:dcrShape>
+      <dcrDi:dcrShape id="Event_05ips30_di" boardElement="Event_05ips30">
+        <dc:Bounds x="360" y="160" width="130" height="150" />
+      </dcrDi:dcrShape>
+      <dcrDi:dcrShape id="SubProcess_01lm2fg_di" boardElement="SubProcess_01lm2fg">
+        <dc:Bounds x="630" y="370" width="400" height="280" />
+      </dcrDi:dcrShape>
+      <dcrDi:relation id="Link_1r5cywd_di" boardElement="Link_1r5cywd">
+        <dcrDi:waypoint x="810" y="525" />
+        <dcrDi:waypoint x="860" y="525" />
+      </dcrDi:relation>
+      <dcrDi:dcrShape id="Event_0kb981x_di" boardElement="Event_0kb981x">
+        <dc:Bounds x="680" y="450" width="130" height="150" />
+      </dcrDi:dcrShape>
+      <dcrDi:dcrShape id="Event_0vztm0v_di" boardElement="Event_0vztm0v">
+        <dc:Bounds x="860" y="450" width="130" height="150" />
+      </dcrDi:dcrShape>
+      <dcrDi:relation id="Link_0pybfv5_di" boardElement="Link_0pybfv5">
+        <dcrDi:waypoint x="394" y="340" />
+        <dcrDi:waypoint x="400" y="410" />
+      </dcrDi:relation>
+      <dcrDi:relation id="Link_0xdrj56_di" boardElement="Link_0xdrj56">
+        <dcrDi:waypoint x="350" y="410" />
+        <dcrDi:waypoint x="350" y="340" />
+      </dcrDi:relation>
+      <dcrDi:relation id="Link_1nv4uol_di" boardElement="Link_1nv4uol">
+        <dcrDi:waypoint x="415" y="485" />
+        <dcrDi:waypoint x="523" y="485" />
+        <dcrDi:waypoint x="523" y="510" />
+        <dcrDi:waypoint x="630" y="510" />
+      </dcrDi:relation>
+      <dcrDi:dcrShape id="Event_041zcp8_di" boardElement="Event_041zcp8">
+        <dc:Bounds x="285" y="410" width="130" height="150" />
+      </dcrDi:dcrShape>
+    </dcrDi:dcrPlane>
+  </dcrDi:dcrRootBoard>
+</dcr:definitions>
+

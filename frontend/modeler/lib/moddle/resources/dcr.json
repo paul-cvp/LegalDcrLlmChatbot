@@ -1,0 +1,341 @@
+{
+  "name": "DCR Graph diagram",
+  "uri": "http://tk/schema/dcr",
+  "prefix": "dcr",
+  "xml": {
+    "tagAlias": "lowerCase"
+  },
+  "types": [
+    {
+      "name": "BoardElement",
+      "isAbstract": true,
+      "properties": [
+        {
+          "name": "id",
+          "isAttr": true,
+          "type": "String",
+          "isId": true
+        }
+      ]
+    },
+    {
+      "name": "Event",
+      "superClass": [
+        "BoardElement"
+      ],
+      "properties": [
+        {
+          "name": "label",
+          "isAttr": true,
+          "type": "String"
+        },
+        {
+          "name": "role",
+          "isAttr": true,
+          "type": "String"
+        },
+        {
+          "name": "description",
+          "isAttr": true,
+          "type": "String"
+        },
+        {
+          "name": "priority",
+          "isAttr": true,
+          "type": "Real"
+        },
+        {
+          "name": "takesInput",
+          "isAttr": true,
+          "type": "Boolean"
+        },
+        {
+          "name": "computation",
+          "isAttr": true,
+          "type": "String"
+        },
+        {
+          "name": "toolCall",
+          "isAttr": true,
+          "type": "String"
+        },
+        {
+          "name": "included",
+          "isAttr": true,
+          "type": "Boolean"
+        },
+        {
+          "name": "executed",
+          "isAttr": true,
+          "type": "Boolean"
+        },
+        {
+          "name": "pending",
+          "isAttr": true,
+          "type": "Boolean"
+        },
+        {
+          "name": "enabled",
+          "isAttr": true,
+          "type": "Boolean"
+        },
+        {
+          "name": "eventData",
+          "type": "EventData"
+        }
+      ]
+    },
+    {
+      "name": "EventData",
+      "properties": [
+        {
+          "name": "name",
+          "isAttr": true,
+          "type": "String"
+        },
+        {
+          "name": "type",
+          "isAttr": true,
+          "type": "String"
+        },
+        {
+          "name": "default",
+          "isAttr": true,
+          "type": "String"
+        }
+      ]
+    },
+    {
+      "name": "Nesting",
+      "superClass": [
+        "BoardElement"
+      ],
+      "properties": [
+        {
+          "name": "label",
+          "isAttr": true,
+          "type": "String"
+        },
+        {
+          "name": "role",
+          "isAttr": true,
+          "type": "String"
+        },
+        {
+          "name": "description",
+          "isAttr": true,
+          "type": "String"
+        },
+        {
+          "name": "boardElements",
+          "type": "BoardElement",
+          "isMany": true
+        }
+      ]
+    },
+    {
+      "name": "SubProcess",
+      "superClass": [
+        "BoardElement"
+      ],
+      "properties": [
+        {
+          "name": "label",
+          "isAttr": true,
+          "type": "String"
+        },
+        {
+          "name": "description",
+          "isAttr": true,
+          "type": "String"
+        },
+        {
+          "name": "role",
+          "isAttr": true,
+          "type": "String"
+        },
+        {
+          "name": "priority",
+          "isAttr": true,
+          "type": "Real"
+        },
+        {
+          "name": "takesInput",
+          "isAttr": true,
+          "type": "Boolean"
+        },
+        {
+          "name": "computation",
+          "isAttr": true,
+          "type": "String"
+        },
+        {
+          "name": "toolCall",
+          "isAttr": true,
+          "type": "String"
+        },
+        {
+          "name": "boardElements",
+          "type": "BoardElement",
+          "isMany": true
+        },
+        {
+          "name": "included",
+          "isAttr": true,
+          "type": "Boolean"
+        },
+        {
+          "name": "executed",
+          "isAttr": true,
+          "type": "Boolean"
+        },
+        {
+          "name": "pending",
+          "isAttr": true,
+          "type": "Boolean"
+        },
+        {
+          "name": "multi-instance",
+          "isAttr": true,
+          "type": "Boolean"
+        }
+      ]
+    },
+    {
+      "name": "Relation",
+      "superClass": [
+        "BoardElement"
+      ],
+      "properties": [
+        {
+          "name": "type",
+          "isAttr": true,
+          "type": "String"
+        },
+        {
+          "name": "sourceRef",
+          "isAttr": true,
+          "isReference": true,
+          "type": "BoardElement"
+        },
+        {
+          "name": "targetRef",
+          "isAttr": true,
+          "isReference": true,
+          "type": "BoardElement"
+        },
+        {
+          "name": "guard",
+          "isAttr": true,
+          "type": "String"
+        },
+        {
+          "name": "value",
+          "isAttr": true,
+          "type": "String"
+        },
+        {
+          "name": "guardComputation",
+          "isAttr": true,
+          "type": "String"
+        },
+        {
+          "name": "valueComputation",
+          "isAttr": true,
+          "type": "String"
+        },
+        {
+          "name": "forAll",
+          "isAttr": true,
+          "type": "Boolean"
+        },
+        {
+          "name": "time",
+          "isAttr": true,
+          "type": "String"
+        }
+      ]
+    },
+    {
+      "name": "DcrGraph",
+      "superClass": [
+        "RootElement"
+      ],
+      "properties": [
+        {
+          "name": "title",
+          "isAttr": true,
+          "type": "String"
+        },
+        {
+          "name": "description",
+          "isAttr": true,
+          "type": "String"
+        },
+        {
+          "name": "boardElements",
+          "isMany": true,
+          "type": "BoardElement"
+        }
+      ]
+    },
+    {
+      "name": "TextBox",
+      "superClass": [
+        "BoardElement"
+      ]
+    },
+    {
+      "name": "RootElement",
+      "isAbstract": true,
+      "superClass": [
+        "BoardElement"
+      ]
+    },
+    {
+      "name": "Definitions",
+      "superClass": [
+        "BoardElement"
+      ],
+      "properties": [
+        {
+          "name": "targetNamespace",
+          "isAttr": true,
+          "type": "String"
+        },
+        {
+          "name": "expressionLanguage",
+          "default": "http://www.w3.org/1999/XPath",
+          "isAttr": true,
+          "type": "String"
+        },
+        {
+          "name": "typeLanguage",
+          "default": "http://www.w3.org/2001/XMLSchema",
+          "isAttr": true,
+          "type": "String"
+        },
+        {
+          "name": "rootElements",
+          "type": "RootElement",
+          "isMany": true
+        },
+        {
+          "name": "rootBoards",
+          "isMany": true,
+          "type": "dcrDi:DcrRootBoard"
+        },
+        {
+          "name": "exporter",
+          "isAttr": true,
+          "type": "String"
+        },
+        {
+          "name": "exporterVersion",
+          "isAttr": true,
+          "type": "String"
+        }
+      ]
+    }
+  ]
+}

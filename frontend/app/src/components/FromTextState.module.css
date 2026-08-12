@@ -1,0 +1,116 @@
+.page {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  color: #182539;
+  background: radial-gradient(circle at top left, rgba(34, 58, 89, 0.08), transparent 28%), #eef2f7;
+}
+
+.page button {
+  border: 1px solid #98a2b3;
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+  color: #344054;
+  background: white;
+  font: inherit;
+  cursor: pointer;
+}
+
+.page button:hover:not(:disabled) { filter: brightness(0.96); }
+.page button:disabled { cursor: not-allowed; opacity: 0.55; }
+
+.sidebar {
+  display: flex;
+  flex: 0 0 min(20vw, 320px);
+  min-width: 240px;
+  min-height: 0;
+  box-sizing: border-box;
+  flex-direction: column;
+  padding: 1rem;
+  border-right: 1px solid rgba(25, 39, 61, 0.1);
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.sidebarHeader { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.75rem; }
+.sidebarTitle { margin: 0; font-size: 1.35rem; }
+.sidebarHeader p, .panelHeading p { margin: 0.3rem 0 0; color: #667085; font-size: 0.85rem; }
+.refreshButton { margin-top: 1rem; }
+.documentList { display: flex; min-height: 0; flex-direction: column; gap: 0.6rem; margin-top: 1rem; overflow-y: auto; }
+
+.documentButton {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.3rem;
+  padding: 0.8rem !important;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.documentButton span { color: #667085; font-size: 0.78rem; }
+.selectedDocument { border-color: #175cd3 !important; box-shadow: 0 0 0 2px rgba(23, 92, 211, 0.12); }
+
+.workspace { display: flex; flex: 1; min-width: 0; min-height: 0; gap: 0.8rem; padding: 0.8rem; }
+.panel { display: flex; min-width: 0; min-height: 0; flex-direction: column; overflow: hidden; border: 1px solid rgba(25, 39, 61, 0.1); border-radius: 18px; background: rgba(255, 255, 255, 0.96); box-shadow: 0 12px 30px rgba(20, 35, 58, 0.07); }
+.expanded { flex: 1; }
+.viewerPanel.expanded { flex: 1.2; }
+.modelerPanel.expanded { flex: 1.35; }
+.collapsed { flex: 0 0 64px; min-width: 64px; }
+.panelHeader { display: flex; justify-content: space-between; gap: 0.75rem; padding: 0.8rem 1rem; border-bottom: 1px solid #eaecf0; }
+.panelHeading { min-width: 0; }
+.panelHeading h2 { margin: 0; font-size: 1.05rem; }
+.collapsed .panelHeader { flex-direction: column; padding: 0.6rem; }
+.collapsed .panelHeading { writing-mode: vertical-rl; transform: rotate(180deg); }
+.collapsed .panelHeader button { padding: 0.35rem; font-size: 0.7rem; }
+.panelBody { display: flex; flex: 1; min-width: 0; min-height: 0; }
+.rail { display: flex; flex: 1; align-items: center; justify-content: center; writing-mode: vertical-rl; transform: rotate(180deg); font-weight: 600; color: #475467; }
+.empty { display: grid; min-height: 140px; flex: 1; place-items: center; padding: 1rem; color: #667085; text-align: center; }
+
+.pdfArea { flex: 1; min-height: 0; overflow: auto; padding: 1rem; }
+.pdfPages { display: flex; flex-direction: column; align-items: center; gap: 1rem; }
+.pdfPages :global(.react-pdf__Page) { box-shadow: 0 10px 24px rgba(16, 24, 40, 0.12); }
+.pdfPages :global(.react-pdf__Page__textContent),
+.pdfPages :global(.react-pdf__Page__textContent *) { user-select: text; }
+.pdfPages :global(.react-pdf__Page__textContent)::selection,
+.pdfPages :global(.react-pdf__Page__textContent *)::selection { color: inherit; background: rgba(247, 232, 138, 0.75); }
+
+.draftBody { display: block; padding: 1rem; overflow-y: auto; box-sizing: border-box; }
+.selectionCard { padding: 0.9rem; margin-bottom: 1rem; border: 1px solid #b2ccff; border-radius: 12px; background: #f5f8ff; }
+.selectionCard > div:first-child { display: flex; justify-content: space-between; gap: 0.5rem; }
+.selectionCard span { color: #667085; font-size: 0.82rem; }
+.selectionPreview { max-height: 180px; margin: 0.7rem 0; padding: 0.7rem; overflow: auto; border-radius: 8px; background: white; white-space: normal; }
+.actions { display: flex; justify-content: flex-end; gap: 0.5rem; }
+.primaryButton, .extractButton { border-color: #175cd3 !important; color: white !important; background: #175cd3 !important; }
+.fieldLabel { display: block; margin: 0.75rem 0 0.35rem; font-size: 0.84rem; font-weight: 600; }
+.richEditor, .draftBody textarea { width: 100%; box-sizing: border-box; border: 1px solid #98a2b3; border-radius: 8px; padding: 0.75rem; background: white; font: inherit; line-height: 1.45; }
+.richEditor { min-height: 180px; overflow-wrap: anywhere; }
+.richEditor:empty::before { content: attr(data-placeholder); color: #98a2b3; }
+.draftBody textarea { min-height: 130px; resize: vertical; }
+.descriptionHeader { display: flex; align-items: center; gap: 0.75rem; margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid #d0d5dd; }
+.descriptionHeading { margin: 0; }
+.descriptionHeader button { padding: 0.35rem 0.6rem; font-size: 0.78rem; }
+.citizenControls { display: flex; align-items: center; gap: 0.65rem; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #d0d5dd; }
+.citizenControls label { font-size: 0.84rem; font-weight: 600; }
+.citizenControls select { flex: 1; min-width: 150px; padding: 0.5rem; border: 1px solid #98a2b3; border-radius: 8px; background: white; font: inherit; }
+.citizenHeading { display: flex; align-items: baseline; justify-content: space-between; gap: 0.75rem; margin-top: 1.25rem; }
+.citizenHeading h3 { margin: 0; }
+.citizenHeading span, .wordCount { color: #667085; font-size: 0.78rem; }
+.citizenOutput { min-height: 220px !important; margin-top: 0.5rem; }
+.wordCount { margin-top: 0.35rem; text-align: right; }
+.extractionProgress { display: flex; align-items: center; justify-content: center; gap: 0.6rem; margin-top: 1rem; color: #175cd3; font-weight: 600; }
+.progressSpinner { width: 0.9rem; height: 0.9rem; border: 2px solid #b2ccff; border-top-color: #175cd3; border-radius: 50%; animation: extraction-spin 0.8s linear infinite; }
+.extractButton { display: block; margin: 1rem auto 0; min-width: 110px; }
+.modelerBody { position: relative; overflow: hidden; }
+.error { position: fixed; right: 1rem; bottom: 1rem; z-index: 100; max-width: 420px; padding: 0.8rem 1rem; border: 1px solid #fda29b; border-radius: 10px; color: #b42318; background: #fef3f2; box-shadow: 0 10px 25px rgba(16, 24, 40, 0.15); }
+
+@keyframes extraction-spin { to { transform: rotate(360deg); } }
+
+@media (max-width: 1400px) {
+  .workspace { flex-direction: column; overflow-y: auto; }
+  .panel.expanded { flex: 0 0 min(70vh, 720px); }
+  .collapsed { flex: 0 0 62px; min-width: 0; min-height: 62px; }
+  .collapsed .panelHeader { flex-direction: row; }
+  .collapsed .panelHeading, .rail { writing-mode: initial; transform: none; }
+  .rail { min-height: 45px; }
+}

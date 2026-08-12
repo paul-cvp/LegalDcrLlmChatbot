@@ -1,0 +1,39 @@
+{
+  "name": "dcr-js",
+  "version": "0.1.0",
+  "private": true,
+  "homepage": "https://hugoalopez-dtu.github.io/dcr-js/",
+  "scripts": {
+    "start": "yarn workspace app start",
+    "build": "yarn workspace @dcr-js/chat build && yarn workspace app predeploy",
+    "test": "yarn workspace @dcr-js/chat test && yarn workspace app test --run",
+    "predeploy": "yarn build"
+  },
+  "eslintConfig": {
+    "extends": [
+      "react-app",
+      "react-app/jest"
+    ]
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  },
+  "workspaces": [
+    "modeler",
+    "app",
+    "dcr-engine",
+    "chat"
+  ],
+  "devDependencies": {
+    "prettier": "3.6.2"
+  }
+}

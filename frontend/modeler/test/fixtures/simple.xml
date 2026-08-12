@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<dcr:definitions xmlns:dcr="http://tk/schema/dcr" xmlns:dcrDi="http://tk/schema/dcrDi" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC">
+  <dcr:dcrGraph id="Graph">
+    <dcr:event id="Event_0gkcl6v" role="From" description="" included="true" executed="false" pending="false" />
+    <dcr:event id="Event_0egj3tr" role="To" description="" included="true" executed="false" pending="false" />
+    <dcr:relation id="Link_048cso9" type="condition" sourceRef="Event_0gkcl6v" targetRef="Event_0egj3tr" />
+  </dcr:dcrGraph>
+  <dcrDi:dcrRootBoard id="RootBoard">
+    <dcrDi:dcrPlane id="Plane" boardElement="Graph">
+      <dcrDi:relation id="Link_048cso9_di" boardElement="Link_048cso9">
+        <dcrDi:waypoint x="360" y="275" />
+        <dcrDi:waypoint x="430" y="275" />
+      </dcrDi:relation>
+      <dcrDi:dcrShape id="Event_0gkcl6v_di" boardElement="Event_0gkcl6v">
+        <dc:Bounds x="230" y="200" width="130" height="150" />
+      </dcrDi:dcrShape>
+      <dcrDi:dcrShape id="Event_0egj3tr_di" boardElement="Event_0egj3tr">
+        <dc:Bounds x="430" y="200" width="130" height="150" />
+      </dcrDi:dcrShape>
+    </dcrDi:dcrPlane>
+  </dcrDi:dcrRootBoard>
+</dcr:definitions>
+

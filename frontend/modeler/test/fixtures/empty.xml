@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<dcr:definitions xmlns:dcr="http://tk/schema/dcr" xmlns:dcrDi="http://tk/schema/dcrDi">
+  <dcr:dcrGraph id="Graph" />
+  <dcrDi:dcrRootBoard id="RootBoard">
+    <dcrDi:dcrPlane id="Plane" boardElement="Graph" />
+  </dcrDi:dcrRootBoard>
+</dcr:definitions>
+

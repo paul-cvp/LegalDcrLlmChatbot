@@ -1,0 +1,353 @@
+import type {
+  DataDCR,
+  DCRGraph,
+  Event,
+  EventMap,
+  Expression,
+  Nestings,
+  RelationType,
+  Variable,
+  VariableType,
+} from "./types";
+
+import ELK, {type ElkExtendedEdge, type ElkNode} from "elkjs";
+
+interface AbstractNode extends ElkNode {
+  id: Event;
+  width: number;
+  height: number;
+  included: boolean;
+  pending: boolean;
+  executed: boolean;
+  variable?: Variable<VariableType>;
+  label: string;
+  description: string;
+  role?: string;
+  children?: Array<AbstractNode>;
+}
+
+interface AbstractEdge extends ElkExtendedEdge {
+  id: string;
+  type: RelationType;
+  source: Event;
+  target: Event;
+  expression?: Expression;
+}
+
+type AbstractGraph = {
+  nodes: Array<AbstractNode>;
+  edges: Array<AbstractEdge>;
+  graph: DCRGraph | DataDCR;
+};
+
+type LayoutType = Omit<ElkNode, "children"> & {
+  children?: ElkNode[] | undefined;
+};
+
+function createXML(
+  laidOutGraph: LayoutType,
+  nodesAndEdges: AbstractGraph,
+  nestings?: Nestings
+) {
+  var xmlContent = '<?xml version="1.0" encoding="UTF-8"?>\n';
+  xmlContent +=
+    '<dcr:definitions xmlns:dcr="http://tk/schema/dcr" xmlns:dcrDi="http://tk/schema/dcrDi" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC">\n';
+  const graph = nodesAndEdges.graph;
+  const title = "title" in graph ? graph.title : "";
+  const description = "description" in graph ? graph.description : "";
+  xmlContent += ` <dcr:dcrGraph id="dcrGraph" title="${escapeAttribute(title || "")}" description="${escapeAttribute(description || "")}">\n`;
+
+  let nodeId = 0;
+  const descToIdMap: { [desc: string]: number } = {};
+
+  const descToId = (desc: string): string => {
+    if (!descToIdMap[desc]) descToIdMap[desc] = ++nodeId;
+    return "Event_" + descToIdMap[desc];
+  };
+
+  const createNodeArrayXML = (
+    nodes: Array<AbstractNode>,
+    nestings: Nestings
+  ): string => {
+    let retval = "";
+    nodes.forEach((node) => {
+      if (nestings.nestingIds.has(node.id)) {
+        retval += `<dcr:nesting id="${descToId(node.id)}" description="${escapeAttribute(node.id)}">\n`;
+        if (node.children)
+          retval += createNodeArrayXML(node.children, nestings);
+        retval += "</dcr:nesting>\n";
+      } else {
+        if(node.variable) {
+          retval += eventStartXML(node, descToId(node.id), false) + "\n";
+          retval += `  <dcr:eventData name="${escapeAttribute(node.variable.name)}" type="${escapeAttribute(node.variable.type)}" />\n`
+          retval += ` </dcr:event>\n`
+        } else {
+          retval += eventStartXML(node, descToId(node.id), true) + "\n";
+        }
+      }
+    });
+    return retval;
+  };
+
+  if (nestings) {
+    xmlContent += createNodeArrayXML(nodesAndEdges.nodes, nestings);
+  } else {
+    nodesAndEdges.nodes.forEach((node) => {
+      if(node.variable) {
+        xmlContent += eventStartXML(node, descToId(node.id), false) + "\n";
+        xmlContent += `  <dcr:eventData name="${escapeAttribute(node.variable.name)}" type="${escapeAttribute(node.variable.type)}" />\n`
+        xmlContent += ` </dcr:event>\n`
+      } else {
+        xmlContent += eventStartXML(node, descToId(node.id), true) + "\n";
+      }
+    });
+  }
+
+  let id = 0;
+  nodesAndEdges.edges.forEach((edge) => {
+    const guard = edge.expression?.text ? ` guard="${escapeAttribute(edge.expression.text)}"` : "";
+    const time = edge.expression?.time ? ` time="${escapeAttribute(edge.expression.time)}"` : "";
+    xmlContent += ` <dcr:relation id="Relation_${++id}" type="${edge.type}" sourceRef="${descToId(edge.source)}" targetRef="${descToId(edge.target)}"${guard}${time}/>\n`;
+  });
+
+  xmlContent += " </dcr:dcrGraph>\n";
+  xmlContent += ' <dcrDi:dcrRootBoard id="RootBoard">\n';
+  xmlContent += ' <dcrDi:dcrPlane id="Plane" boardElement="dcrGraph">\n';
+
+  const nodeCoordinates: { [nodeId: string]: { x: number; y: number } } = {};
+
+  const createElkNodeArrayXML = (
+    nodes: Array<ElkNode>,
+    parentX: number,
+    parentY: number
+  ): string => {
+    let retval = "";
+    nodes.forEach((node) => {
+      if (!node.x || !node.y) throw new Error("Coordinates missing...");
+      const x = parentX + node.x;
+      const y = parentY + node.y;
+      nodeCoordinates[node.id] = { x, y };
+      retval += `<dcrDi:dcrShape id="${descToId(node.id)}_di" boardElement="${descToId(node.id)}">\n`;
+      retval += ` <dc:Bounds x="${x}" y="${y}" width="${node.width}" height="${node.height}"/>\n`;
+      retval += " </dcrDi:dcrShape>\n";
+      if (node.children) retval += createElkNodeArrayXML(node.children, x, y);
+    });
+    return retval;
+  };
+
+  nodeCoordinates[laidOutGraph.id] = { x: 0, y: 0 };
+  if (laidOutGraph.children)
+    xmlContent += createElkNodeArrayXML(laidOutGraph.children, 0, 0);
+
+  id = 0;
+  laidOutGraph.edges?.forEach((edge) => {
+    const { x: baseX, y: baseY } = edge.container
+      ? nodeCoordinates[edge.container]
+      : { x: 0, y: 0 };
+    if (edge.sections) {
+      xmlContent += `<dcrDi:relation id="Relation_${++id}_di" boardElement="Relation_${id}">\n`;
+      xmlContent += ` <dcrDi:waypoint x="${baseX + edge.sections[0].startPoint.x}" y="${baseY + edge.sections[0].startPoint.y}" />\n`;
+
+      edge.sections[0].bendPoints?.forEach((bendPoint) => {
+        xmlContent += ` <dcrDi:waypoint x="${baseX + bendPoint.x}" y="${baseY + bendPoint.y}" />\n`;
+      });
+
+      xmlContent += ` <dcrDi:waypoint x="${baseX + edge.sections[0].endPoint.x}" y="${baseY + edge.sections[0].endPoint.y}" />\n`;
+      xmlContent += " </dcrDi:relation>\n";
+    }
+
+    //for self referencing nodes when using layouts without bendpoints
+    else {
+      xmlContent += `<dcrDi:relation id="Relation_${++id}_di" boardElement="Relation_${id}">\n`;
+      xmlContent += ` <dcrDi:waypoint x="${NaN}" y="${NaN}" />\n`;
+      xmlContent += " </dcrDi:relation>\n";
+    }
+  });
+
+  xmlContent += " </dcrDi:dcrPlane>\n";
+  xmlContent += " </dcrDi:dcrRootBoard>\n";
+  xmlContent += "</dcr:definitions>\n";
+
+  return xmlContent;
+}
+
+function escapeAttribute(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\r\n?/g, "&#10;")
+    .replace(/\n/g, "&#10;")
+    .replace(/\t/g, "&#9;");
+}
+
+function eventStartXML(node: AbstractNode, id: string, closed: boolean): string {
+  const role = node.role ? ` role="${escapeAttribute(node.role)}"` : "";
+  const takesInput = node.variable ? ' takesInput="true"' : "";
+  const ending = closed ? " />" : ">";
+  return ` <dcr:event id="${id}" label="${escapeAttribute(node.label)}"${role} description="${escapeAttribute(node.description)}" included="${node.included}" executed="${node.executed}" pending="${node.pending}" enabled="false"${takesInput}${ending}`;
+}
+
+// https://stackoverflow.com/questions/18017869/build-tree-array-from-flat-array-in-javascript
+type TempNode = { id: string; parent: string; children: Array<TempNode> };
+
+function listToTree(list: Array<{ id: string; parent: string }>) {
+  const map: { [id: string]: number } = {};
+
+  let trees = [];
+
+  const newList: Array<TempNode> = list.map((elem) => ({
+    ...elem,
+    children: [],
+  }));
+  for (let i = 0; i < newList.length; i += 1) {
+    map[newList[i].id] = i; // initialize the map
+  }
+
+  for (let i = 0; i < newList.length; i += 1) {
+    const node = newList[i];
+    if (node.parent) {
+      // if you have dangling branches check that map[node.parent] exists
+      newList[map[node.parent]].children.push(node);
+    } else {
+      trees.push(node);
+    }
+  }
+  return trees;
+}
+
+function treesToAbstractNodeArray(
+  trees: Array<TempNode>,
+  graph: DCRGraph | DataDCR,
+  nestings: Nestings
+): Array<AbstractNode> {
+  const data = "data" in graph ? graph.data : {};
+  const metadata = "eventMetadata" in graph ? graph.eventMetadata : undefined;
+  return trees.map((node) => {
+    const eventMetadata = metadata?.[node.id];
+    return {
+      id: node.id,
+      width: 130,
+      height: 150,
+      variable: data[node.id],
+      label: eventMetadata?.label ?? node.id,
+      description: eventMetadata?.description ?? node.id,
+      role: eventMetadata?.role,
+      included: graph.marking.included.has(node.id),
+      pending: graph.marking.pending.has(node.id),
+      executed: graph.marking.executed.has(node.id),
+      children:
+        node.children.length > 0
+          ? treesToAbstractNodeArray(node.children, graph, nestings)
+          : undefined,
+      layoutOptions: nestings.nestingIds.has(node.id)
+        ? {
+            "elk.padding": "[left=50, top=100, right=25, bottom=50]",
+          }
+        : undefined,
+    };
+  });
+}
+
+function getAbstractGraph(graph: DCRGraph | DataDCR, nestings?: Nestings): AbstractGraph {
+  let nodes: Array<AbstractNode> = [];
+  const edges: Array<AbstractEdge> = [];
+
+  const loadEdge = (rel: EventMap, type: RelationType, guards?: DataDCR["expressions"]) => {
+    if (type == "condition" || type == "milestone") {
+      Object.keys(rel).forEach((target) => {
+        rel[target].forEach((source) => {
+          const expression = guards?.[source]?.[target];
+          edges.push({
+            id: `${source}-${target}-${type}`,
+            source,
+            target,
+            sources: [source],
+            targets: [target],
+            type,
+            expression,
+          });
+        });
+      });
+    } else {
+      Object.keys(rel).forEach((source) => {
+        rel[source].forEach((target) => {
+          const expression = guards?.[source]?.[target];
+          edges.push({
+            id: `${source}-${target}-${type}`,
+            source,
+            target,
+            sources: [source],
+            targets: [target],
+            type,
+            expression,
+          });
+        });
+      });
+    }
+  };
+  if (nestings) {
+    const trees = listToTree(
+      [...graph.events].map((id) => ({
+        id,
+        parent: nestings.nestingRelations[id],
+      }))
+    );
+    nodes = treesToAbstractNodeArray(trees, graph, nestings);
+  } else {
+    const data = "data" in graph ? graph.data : {};
+    const metadata = "eventMetadata" in graph ? graph.eventMetadata : undefined;
+    graph.events.forEach((event) => {
+      const variable = data[event];
+      const eventMetadata = metadata?.[event];
+      nodes.push({
+        id: event,
+        width: 130,
+        height: 150,
+        variable: variable,
+        label: eventMetadata?.label ?? event,
+        description: eventMetadata?.description ?? event,
+        role: eventMetadata?.role,
+        included: graph.marking.included.has(event),
+        pending: graph.marking.pending.has(event),
+        executed: graph.marking.executed.has(event),
+      });
+    });
+  }
+
+  const guards = "expressions" in graph ? graph["expressions"] : undefined;
+
+  loadEdge(graph.conditionsFor, "condition", guards);
+  loadEdge(graph.milestonesFor, "milestone", guards);
+  loadEdge(graph.responseTo, "response", guards);
+  loadEdge(graph.excludesTo, "exclude", guards);
+  loadEdge(graph.includesTo, "include", guards);
+
+  return { nodes, edges, graph };
+}
+
+export default async function layoutGraph(
+  graph: DCRGraph | DataDCR,
+  nestings?: Nestings
+) {
+  const abstractGraph = getAbstractGraph(graph, nestings);
+
+  const layout: ElkNode = {
+    id: "root",
+    layoutOptions: {
+      "org.eclipse.elk.hierarchyHandling": "INCLUDE_CHILDREN",
+      "elk.layered.spacing.nodeNodeBetweenLayers": "50",
+      "elk.spacing.nodeNode": "50",
+      "elk.spacing.edgeNode": "25",
+    },
+    children: abstractGraph.nodes,
+    edges: abstractGraph.edges,
+  };
+  const elk = new ELK();
+  const result = await elk.layout(layout);
+
+  const xmlContent = createXML(result, abstractGraph, nestings);
+
+  return xmlContent;
+}

@@ -1,0 +1,59 @@
+{
+  "name": "modeler",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "all": "run-s lint test",
+    "lint": "eslint .",
+    "test": "vitest",
+    "coverage": "vitest run --coverage",
+    "dev": "npm test -- --auto-watch --no-single-run"
+  },
+  "main": "lib/Modeler.js",
+  "keywords": [
+    "diagram-js",
+    "dcr graph diagram editor",
+    "dcr graph diagram modeler"
+  ],
+  "author": {
+    "name": "",
+    "url": "https://"
+  },
+  "license": "SEE LICENSE IN LICENSE",
+  "sideEffects": [
+    "*.css"
+  ],
+  "devDependencies": {
+    "@edge-runtime/vm": "^3.0.4",
+    "@types/lodash": "^4.17.13",
+    "@vitest/browser": "^0.34.1",
+    "@vitest/coverage-v8": "^0.34.1",
+    "@vitest/ui": "^0.34.1",
+    "eslint": "^8.46.0",
+    "file-loader": "^6.2.0",
+    "happy-dom": "^20.9.0",
+    "jsdom": "^22.1.0",
+    "raw-loader": "^4.0.2",
+    "stream-browserify": "^3.0.0",
+    "timers-browserify": "^2.0.12",
+    "typescript": "^5.6.3",
+    "vitest": "^0.34.1",
+    "webdriverio": "^8.14.3"
+  },
+  "dependencies": {
+    "bpmn-font": "^0.12.1",
+    "css.escape": "^1.5.1",
+    "diagram-js": "^12.2.0",
+    "diagram-js-direct-editing": "^2.0.0",
+    "ids": "^1.0.5",
+    "inherits": "^2.0.4",
+    "min-dash": "^4.1.1",
+    "min-dom": "^4.1.0",
+    "moddle": "^6.2.3",
+    "moddle-xml": "^10.1.0",
+    "object-refs": "^0.3.0",
+    "stream-browserify": "^3.0.0",
+    "tiny-svg": "^3.0.1",
+    "xml2js": "^0.6.2"
+  }
+}
