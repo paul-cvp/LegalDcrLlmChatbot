@@ -175,6 +175,10 @@
           "type": "String"
         },
         {
+          "name": "eventData",
+          "type": "EventData"
+        },
+        {
           "name": "boardElements",
           "type": "BoardElement",
           "isMany": true

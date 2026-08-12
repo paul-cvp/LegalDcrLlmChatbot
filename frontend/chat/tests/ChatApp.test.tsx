@@ -17,7 +17,6 @@ const settings: ChatSettings = {
   dcrRole: "Citizen",
   robotAutoExecutionsPerActivity: DEFAULT_ROBOT_AUTO_EXECUTIONS_PER_ACTIVITY,
   useCitizenInformation: false,
-  useCitizenData: false,
   searchIndex: "All",
   suggestFollowupQuestions: true,
   retrieveCount: 5,
@@ -140,8 +139,7 @@ describe("ChatApp", () => {
 
     expect(field("DCR Role")?.disabled).toBe(false);
     expect(field("Automatic Robot executions per activity")?.disabled).toBe(false);
-    expect(field("Use cached Citizen Information")?.disabled).toBe(false);
-    expect(field("Use Citizen input data from DCR Graph executions")?.disabled).toBe(false);
+    expect(field("Use Citizen Information")?.disabled).toBe(false);
     expect(field("Search index")?.disabled).toBe(true);
     expect(field("Suggest follow-up statements")?.disabled).toBe(true);
     expect(field("Retrieve count")?.disabled).toBe(true);
@@ -150,15 +148,14 @@ describe("ChatApp", () => {
     render(<ChatApp {...props} mode="rag" hasCachedCitizenInformation />);
     expect(field("DCR Role")?.disabled).toBe(true);
     expect(field("Automatic Robot executions per activity")?.disabled).toBe(true);
-    expect(field("Use cached Citizen Information")?.disabled).toBe(false);
-    expect(field("Use Citizen input data from DCR Graph executions")?.disabled).toBe(true);
+    expect(field("Use Citizen Information")?.disabled).toBe(false);
     expect(field("Search index")?.disabled).toBe(false);
     expect(field("Suggest follow-up statements")?.disabled).toBe(false);
     expect(field("Retrieve count")?.disabled).toBe(true);
     expect(field("Minimum search score")?.disabled).toBe(true);
   });
 
-  it("updates the Citizen Information and DCR execution-data settings", () => {
+  it("updates the Citizen Information setting", () => {
     const onSettingsChange = vi.fn();
     render(
       <ChatApp
@@ -169,16 +166,10 @@ describe("ChatApp", () => {
     );
     act(() => button("Settings")?.click());
 
-    act(() => field("Use cached Citizen Information")?.click());
+    act(() => field("Use Citizen Information")?.click());
     expect(onSettingsChange).toHaveBeenCalledWith({
       ...settings,
       useCitizenInformation: true,
-    });
-
-    act(() => field("Use Citizen input data from DCR Graph executions")?.click());
-    expect(onSettingsChange).toHaveBeenCalledWith({
-      ...settings,
-      useCitizenData: true,
     });
   });
 
@@ -277,6 +268,43 @@ describe("ChatApp", () => {
       expect.objectContaining({ id: "answer" }),
     );
     expect(container?.querySelector('[role="tabpanel"]')).toBeTruthy();
+  });
+
+  it("opens both analysis views for a citation-free tool result", () => {
+    const onCitationSelect = vi.fn();
+    render(
+      <ChatApp
+        {...props}
+        onCitationSelect={onCitationSelect}
+        messages={[{
+          id: "summary",
+          role: "assistant",
+          content: "Case summary",
+          supportingContent: [{
+            id: "summary-result",
+            title: "Summarize case",
+            content: "The generated summary",
+            metadata: { toolCall: "summarize_case_history" },
+          }],
+          citations: [],
+        }]}
+      />,
+    );
+
+    const message = container?.querySelector(".dcrChat__message--assistant");
+    const actions = [...(message?.querySelectorAll("button") ?? [])];
+    expect(actions.map((action) => action.textContent)).toEqual([
+      "Supporting Content",
+      "Citation",
+    ]);
+
+    act(() => actions[0]?.click());
+    expect(container?.querySelector('[role="tabpanel"]')?.textContent)
+      .toContain("The generated summary");
+    act(() => actions[1]?.click());
+    expect(container?.querySelector('[role="tabpanel"]')?.textContent)
+      .toContain("No citations are available for this answer.");
+    expect(onCitationSelect).not.toHaveBeenCalled();
   });
 
   it("renders interpreted values beneath the original user answer", () => {

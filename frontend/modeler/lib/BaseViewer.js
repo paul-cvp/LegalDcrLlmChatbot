@@ -719,7 +719,9 @@ function extractGuardVarNamesBV(guard) {
 BaseViewer.prototype.validateGuards = function () {
   var elementRegistry = this.get('elementRegistry');
   var varNames = new Set();
-  elementRegistry.filter(function (el) { return el.type === 'dcr:Event'; }).forEach(function (el) {
+  elementRegistry.filter(function (el) {
+    return el.type === 'dcr:Event' || el.type === 'dcr:SubProcess';
+  }).forEach(function (el) {
     var ed = el.businessObject.get('eventData');
     if (ed && ed.name) varNames.add(ed.name);
   });

@@ -23,6 +23,7 @@ describe("ChatApiClient", () => {
       metadata: {
         search_indexes: ["find_relevant_laws", "find_similar_cases"],
         generate_followups: true,
+        use_citizen_data: true,
       },
     },
     {
@@ -86,7 +87,11 @@ describe("ChatApiClient", () => {
     const error = await client.createResponse({
       text: "question",
       chat_type: CHAT_TYPE.RAG_CHAT,
-      metadata: { search_indexes: [], generate_followups: false },
+      metadata: {
+        search_indexes: [],
+        generate_followups: false,
+        use_citizen_data: false,
+      },
     }).catch((reason: unknown) => reason);
 
     expect(error).toBeInstanceOf(ChatApiError);

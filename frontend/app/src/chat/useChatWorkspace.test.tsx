@@ -7,7 +7,6 @@ import { ChatApiClient, type ChatHistoryEntry } from "../api/chat";
 import { ChatWorkspaceController } from "./ChatWorkspaceController";
 import { ChatSessionRepository } from "./sessionRepository";
 import {
-  DEFAULT_CHAT_SETTINGS,
   type ChatWorkspace,
   useChatWorkspace,
 } from "./useChatWorkspace";
@@ -112,7 +111,6 @@ describe("useChatWorkspace", () => {
     await act(async () => workspace.current.updateSettings({
       ...workspace.current.settings,
       useCitizenInformation: true,
-      useCitizenData: true,
     }));
     await act(async () => workspace.current.send("I need support"));
     expect(requests[0]).toMatchObject({
@@ -419,11 +417,12 @@ describe("useChatWorkspace", () => {
     expect(requests[0]?.metadata).toEqual({
       search_indexes: ["find_relevant_laws", "find_similar_cases"],
       generate_followups: true,
+      use_citizen_data: true,
     });
     expect(requests[0]?.citizen_information).toBe("Cached citizen profile");
 
     const similarOnly: ChatSettings = {
-      ...DEFAULT_CHAT_SETTINGS,
+      ...workspace.current.settings,
       searchIndex: "Similar cases",
       suggestFollowupQuestions: false,
     };
@@ -432,7 +431,62 @@ describe("useChatWorkspace", () => {
     expect(requests.at(-1)?.metadata).toEqual({
       search_indexes: ["find_similar_cases"],
       generate_followups: false,
+      use_citizen_data: true,
     });
+  });
+
+  it("rebuilds every DCR tool result when restoring a session", async () => {
+    const graphXml = `<dcr:definitions xmlns:dcr="http://tk/schema/dcr">
+      <dcr:dcrGraph id="tools">
+        <dcr:event id="Event_law" label="Check law" role="Robot"
+          toolCall="find_relevant_laws" included="true" />
+        <dcr:event id="Event_summary" label="Case summary" role="Case worker"
+          toolCall="summarize_case_history" included="true" />
+      </dcr:dcrGraph>
+    </dcr:definitions>`;
+    const history: ChatHistoryEntry[] = [{
+      item: "Robot activity Check law executed with data 'Rule [laws/rule.pdf#page=2]'.",
+      chat_role: "assistant",
+      dcr_role: "Robot",
+      metadata: { activity_id: "law", activity_label: "Check law" },
+    }, {
+      item: "Robot activity Case summary executed with data 'Summary without sources'.",
+      chat_role: "assistant",
+      dcr_role: "Case worker",
+      metadata: { activity_id: "summary", activity_label: "Case summary" },
+    }];
+    const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).endsWith("/history")) return Response.json(history);
+      throw new Error(`Unexpected request: ${input}`);
+    });
+    const controller = createController(fetcher);
+    await controller.saveSession({
+      id: "tools-session",
+      mode: "dcr",
+      title: "Tools",
+      updatedAt: 1,
+      selectedRole: "Citizen",
+      robotAutoExecutionsPerActivity: 1,
+      graphXml,
+      messages: [],
+      enrichment: {},
+      candidates: [],
+      candidateDescriptions: {},
+    });
+    const workspace = await renderWorkspace({ mode: "rag" }, controller);
+
+    await act(async () => workspace.current.selectSession("tools-session"));
+
+    expect(workspace.current.messages[0]?.supportingContent?.[0]?.content)
+      .toBe("Rule [laws/rule.pdf#page=2]");
+    expect(workspace.current.messages[0]?.citations?.[0]).toMatchObject({
+      source: "laws/rule.pdf",
+      page: 2,
+      kind: "law",
+    });
+    expect(workspace.current.messages[1]?.supportingContent?.[0]?.content)
+      .toBe("Summary without sources");
+    expect(workspace.current.messages[1]?.citations).toEqual([]);
   });
 
   it("deletes every stored chat session", async () => {

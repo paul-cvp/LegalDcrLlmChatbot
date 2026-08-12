@@ -120,7 +120,13 @@ export function ChatApp({
 
   const openCitations = (message: ChatMessage) => {
     const citation = message.citations?.[0];
-    if (citation) selectCitation(citation, message);
+    if (citation) {
+      selectCitation(citation, message);
+      return;
+    }
+    setSelectedMessageId(message.id);
+    setSelectedCitationId(undefined);
+    setAnalysisTab("citation");
   };
 
   const openGraph = () => {
@@ -238,7 +244,7 @@ export function ChatApp({
                         Supporting Content
                       </button>
                     )}
-                    {!!message.citations?.length && (
+                    {(!!message.citations?.length || hasToolResult(message)) && (
                       <button type="button" onClick={() => openCitations(message)}>
                         Citation
                       </button>
@@ -320,7 +326,9 @@ export function ChatApp({
                   role="tab"
                   type="button"
                   aria-selected={analysisTab === "citation"}
-                  disabled={!selectedMessage?.citations?.length}
+                  disabled={!selectedMessage || (
+                    !selectedMessage.citations?.length && !hasToolResult(selectedMessage)
+                  )}
                   onClick={() => selectedMessage && openCitations(selectedMessage)}
                 >
                   Citation
@@ -399,7 +407,6 @@ export function ChatApp({
                 onDcrRoleChange={(value) => void updateSetting("dcrRole", value)}
                 onRobotAutoExecutionsChange={(value) => void updateSetting("robotAutoExecutionsPerActivity", value)}
                 onCitizenInformationChange={(value) => void updateSetting("useCitizenInformation", value)}
-                onCitizenDataChange={(value) => void updateSetting("useCitizenData", value)}
                 onSearchIndexChange={(value) => void updateSetting("searchIndex", value)}
                 onFollowupsChange={(value) => void updateSetting("suggestFollowupQuestions", value)}
               />
@@ -534,6 +541,13 @@ function SupportingContent({ items }: { items: NonNullable<ChatMessage["supporti
   );
 }
 
+function hasToolResult(message: ChatMessage): boolean {
+  return message.supportingContent?.some((item) => {
+    const toolCall = item.metadata?.toolCall;
+    return typeof toolCall === "string" && Boolean(toolCall.trim());
+  }) ?? false;
+}
+
 interface CitationContentProps {
   citations: readonly ChatCitation[];
   selectedCitation?: ChatCitation;
@@ -617,7 +631,6 @@ interface SettingsProps {
   onDcrRoleChange: (value: DcrRole) => void;
   onRobotAutoExecutionsChange: (value: number) => void;
   onCitizenInformationChange: (value: boolean) => void;
-  onCitizenDataChange: (value: boolean) => void;
   onSearchIndexChange: (value: SearchIndex) => void;
   onFollowupsChange: (value: boolean) => void;
 }
@@ -630,7 +643,6 @@ function Settings({
   onDcrRoleChange,
   onRobotAutoExecutionsChange,
   onCitizenInformationChange,
-  onCitizenDataChange,
   onSearchIndexChange,
   onFollowupsChange,
 }: SettingsProps) {
@@ -682,17 +694,6 @@ function Settings({
         {!hasCachedCitizenInformation && (
           <small>No Citizen Information is available.</small>
         )}
-      </label>
-
-      <label className="dcrChat__checkbox">
-        <input
-          type="checkbox"
-          checked={value.useCitizenData}
-          disabled={isRag || busy}
-          onChange={(event) => onCitizenDataChange(event.target.checked)}
-        />
-        <span>Use Citizen input data from DCR Graph executions</span>
-        {isRag && <small>This setting applies only to DCR chats.</small>}
       </label>
 
       <label>

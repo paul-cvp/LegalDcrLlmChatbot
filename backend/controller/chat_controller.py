@@ -55,7 +55,7 @@ class ChatController:
         graph_xml: str | None = None,
         robot_auto_limit: int | None = None,
         user_context: str| None = None,
-        use_citizen_data: str | None = None
+        use_citizen_data: bool = False
     ) -> ChatWithHistory:
         approach = cls.APPROACHES[chat_type]
         if ChatType.DCR_CHAT == chat_type:
@@ -87,8 +87,8 @@ class ChatController:
             assert request.chat_type is not None
             graph_xml = request.graph_xml if isinstance(request, DcrChatRequest) else None
             robot_auto_limit = request.robot_auto_limit if isinstance(request, DcrChatRequest) else None
-            user_context = request.citizen_information if isinstance(request,DcrChatRequest) or isinstance(request, RagChatResponse) else None
-            use_citizen_data = request.metadata.use_citizen_data if isinstance(request, DcrChatRequest) and request.metadata else None
+            user_context = request.citizen_information
+            use_citizen_data = bool(getattr(request.metadata, "use_citizen_data", False))
             chat = self._load_chat_approach(
                 request.chat_type,
                 graph_xml,

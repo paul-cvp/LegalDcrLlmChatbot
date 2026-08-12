@@ -36,6 +36,7 @@ import {
   canonicalizeDcrRole,
   extractAutomaticRobotExecutions,
   extractDcrToolEvidence,
+  type DcrToolEvidence,
   isRobotActivity,
   mergeChatHistory,
   normalizeRagEvidence,
@@ -48,7 +49,6 @@ export const DEFAULT_CHAT_SETTINGS: ChatSettings = {
   dcrRole: "Citizen",
   robotAutoExecutionsPerActivity: DEFAULT_ROBOT_AUTO_EXECUTIONS_PER_ACTIVITY,
   useCitizenInformation: false,
-  useCitizenData: false,
   searchIndex: "All",
   suggestFollowupQuestions: true,
   retrieveCount: 5,
@@ -248,28 +248,15 @@ export function useChatWorkspace(
         working.candidateDescriptions,
         working.enrichment,
       );
-      const enrichments = { ...working.enrichment };
-      for (const evidence of toolEvidence) {
-        const message = messages.find(
-          ({ historyIndex }) => historyIndex === evidence.historyIndex,
-        );
-        if (!message) continue;
-        const enrichment: ChatMessageEnrichment = {
-          supportingContent: evidence.supportingContent,
-          citations: evidence.citations,
-        };
-        messages = messages.map((entry) =>
-          entry.id === message.id ? { ...entry, ...enrichment } : entry,
-        );
-        enrichments[message.id] = enrichment;
-      }
+      const enriched = applyDcrToolEvidence(messages, toolEvidence, working.enrichment);
+      messages = enriched.messages;
       next = {
         ...next,
         graphXml,
         pendingActivityId: response.act_id ?? undefined,
         pendingActivityRole: canonicalizeDcrRole(response.dcr_role),
         messages,
-        enrichment: enrichments,
+        enrichment: enriched.enrichment,
         candidates: [],
       };
       historyRef.current = history;
@@ -499,14 +486,23 @@ export function useChatWorkspace(
       if (!record) throw new Error("This chat is no longer available.");
       try {
         const history = await controller.history(id, signal);
+        const merged = mergeChatHistory(
+          history,
+          record.messages,
+          record.candidateDescriptions,
+          record.enrichment,
+        );
+        const enriched = record.graphXml
+          ? applyDcrToolEvidence(
+              merged,
+              extractDcrToolEvidence([], history, record.graphXml),
+              record.enrichment,
+            )
+          : { messages: merged, enrichment: record.enrichment };
         const restored: ActiveSession = {
           ...record,
-          messages: mergeChatHistory(
-            history,
-            record.messages,
-            record.candidateDescriptions,
-            record.enrichment,
-          ),
+          messages: enriched.messages,
+          enrichment: enriched.enrichment,
         };
         historyRef.current = history;
         setSettings((current: ChatSettings) => ({
@@ -623,7 +619,7 @@ function requestOptions(
     citizenInformation: settings.useCitizenInformation
       ? citizenInformation
       : undefined,
-    useCitizenData: settings.useCitizenData,
+    useCitizenInformation: settings.useCitizenInformation,
     signal,
   };
 }
@@ -631,6 +627,32 @@ function requestOptions(
 function asRecord(session: ActiveSession): ChatSessionRecord {
   if (!session.id) throw new Error("Cannot persist a chat without a session ID.");
   return { ...session, id: session.id };
+}
+
+function applyDcrToolEvidence(
+  messages: readonly StoredChatMessage[],
+  evidenceItems: readonly DcrToolEvidence[],
+  existing: Readonly<Record<string, ChatMessageEnrichment>>,
+): { messages: StoredChatMessage[]; enrichment: Record<string, ChatMessageEnrichment> } {
+  const nextMessages = [...messages];
+  const enrichment = { ...existing };
+
+  for (const evidence of evidenceItems) {
+    const index = nextMessages.findIndex(
+      ({ historyIndex }) => historyIndex === evidence.historyIndex,
+    );
+    if (index < 0) continue;
+    const message = nextMessages[index]!;
+    const update: ChatMessageEnrichment = {
+      ...enrichment[message.id],
+      supportingContent: evidence.supportingContent,
+      citations: evidence.citations,
+    };
+    nextMessages[index] = { ...message, ...update };
+    enrichment[message.id] = update;
+  }
+
+  return { messages: nextMessages, enrichment };
 }
 
 function messageId(prefix: string): string {

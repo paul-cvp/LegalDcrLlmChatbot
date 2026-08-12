@@ -43,6 +43,7 @@ class RagChatMetadata(BaseModel):
     search_indexes: list[RagSearchIndex] = Field(default_factory=list)
     generate_followups: bool = False
     use_chat_history : bool = False
+    use_citizen_data : bool = False
 
 class DcrChatMetadata(BaseModel):
     use_citizen_data : bool = False

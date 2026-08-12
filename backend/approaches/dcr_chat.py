@@ -118,7 +118,7 @@ class DcrChat(ChatWithHistory):
     ) -> None:
         super().__init__()
         self._dcr_graph = dcr_graph
-        self._dcr_semantics = DcrSemantics(user_context=user_context,use_citizen_data=use_citizen_data)
+        self._dcr_semantics = DcrSemantics(user_context=user_context, use_citizen_data=use_citizen_data)
         self._enabled_events = set()
         self._enabled_pending = set()
         self._trace = []
@@ -167,11 +167,29 @@ class DcrChat(ChatWithHistory):
             # LLM to interpret the input as data for the event
             input_interpreted = await self._i_llm_tool.get_closest_match(input, act.eventData.data_type)
             self.record_response(item=f"{input}", chat_role="user")
-            self.record_response(item=f"Interpreted as {input_interpreted}", chat_role="user",dcr_role=dcr_role,metadata={"interpreted":True})
+            self.record_response(item=f"Interpreted as {input_interpreted}", chat_role="user", dcr_role=dcr_role, metadata={"interpreted":True})
 
         execution = DcrExecution(act_id, input=input_interpreted, role=dcr_role)
+        if not act.description:
+            act.description = input
         self._dcr_semantics.executeActivity(execution, self._dcr_graph)
+        if not act.description:
+            act.description = None
         self.trace.append(execution)
+
+        msg = f"In answering the query '{act.description}' " if act.description else ""
+        msg += f"The answer is: {act.data}" if act.data else ""
+        self.record_response(
+            item=f"{msg}",
+            chat_role="assistant",
+            dcr_role=dcr_role,
+            metadata={
+                "robot_execution": False,
+                "activity_id": act.ID,
+                "activity_label": act.label,
+            },
+        )
+
 
     async def handle_robot_permission(self, request: DcrChatRequest) -> bool:
         pending = self._robot_policy.pending
@@ -188,8 +206,8 @@ class DcrChat(ChatWithHistory):
         self._robot_policy.clear_permission()
         if decision:
             return await self.execute_robot_activity(act)
-
-        self._robot_policy.deny_current_occurrence(act)
+   
+        # self._robot_policy.deny_current_occurrence(act)
         self.record_response(item=f"Permission denied. Robot activity {act.label} was not executed.", chat_role="assistant", dcr_role=request.dcr_role)
         LOGGER.info("DCR Chat: Robot activity %s permission denied", act.ID)
         return False
@@ -330,7 +348,7 @@ class DcrChat(ChatWithHistory):
             if pending is not None and pending.activity_id == id:
                 role = active_role
                 question = await self._o_llm_tool.get_robot_permission_question(act, self.history[-10:])
-                LOGGER.info("DCR Chat: asking permission for Robot activity %s: %s", act.ID, question,)
+                LOGGER.info("DCR Chat: asking permission for Robot activity %s: %s", act.label, question,)
             else:
                 role = act.role
                 question = (act.description or "").strip() or None

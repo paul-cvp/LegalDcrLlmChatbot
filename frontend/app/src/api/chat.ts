@@ -11,6 +11,7 @@ export type RagSearchIndex = "find_relevant_laws" | "find_similar_cases";
 export interface RagChatMetadata {
   search_indexes: RagSearchIndex[];
   generate_followups: boolean;
+  use_citizen_data: boolean;
 }
 
 export interface DcrChatStartRequest {

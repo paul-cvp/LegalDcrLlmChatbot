@@ -90,7 +90,7 @@ describe("no-response and set-value modeler support", () => {
     const source = modeler.getElementRegistry().get("Source");
     const provider = modeler.get("guardsAndTimeProvider");
     const entries = provider.getContextPadEntries(source);
-    expect(Object.keys(entries)).toEqual(["edit-variables", "edit-metadata"]);
+    expect(Object.keys(entries)).toEqual(["edit-metadata"]);
     expect(entries["edit-metadata"]).toMatchObject({
       className: "bpmn-icon-text-annotation",
       title: "Edit metadata",
@@ -103,6 +103,7 @@ describe("no-response and set-value modeler support", () => {
     const priority = document.querySelector("#_metadata_priority");
     expect(description.value).toBe("Hidden description");
     expect(priority.value).toBe("");
+    expect(document.querySelector("#_metadata_var_name").value).toBe("amount");
     label.value = "Updated label";
     role.value = "Citizen";
     description.value = "Updated metadata";
@@ -132,6 +133,36 @@ describe("no-response and set-value modeler support", () => {
     document.querySelector("#_metadata_cancel").click();
     expect(source.businessObject.description).toBe("Hidden description");
     expect(source.businessObject.priority).toBeUndefined();
+    modeler.destroy();
+  });
+
+  it("edits an event data variable in the activity metadata panel", async () => {
+    const modeler = await createModeler();
+    const source = modeler.getElementRegistry().get("Source");
+    const provider = modeler.get("guardsAndTimeProvider");
+
+    provider.openMetadataPanel(source);
+    document.querySelector("#_metadata_var_name").value = "approved";
+    document.querySelector("#_metadata_var_name").dispatchEvent(new Event("input"));
+    const type = document.querySelector("#_metadata_var_type");
+    type.value = "Bool";
+    type.dispatchEvent(new Event("change"));
+    const defaultValue = document.querySelector("#_metadata_var_default");
+    defaultValue.value = "false";
+    defaultValue.dispatchEvent(new Event("change"));
+    document.querySelector("#_metadata_save").click();
+
+    expect(source.businessObject.eventData).toMatchObject({
+      name: "approved",
+      type: "Bool",
+      default: "false",
+    });
+    modeler.get("commandStack").undo();
+    expect(source.businessObject.eventData).toMatchObject({
+      name: "amount",
+      type: "Int",
+      default: "1",
+    });
     modeler.destroy();
   });
 

@@ -52,20 +52,6 @@ GuardsAndTimeProvider.prototype.getContextPadEntries = function(element) {
     };
   }
 
-  if (is(element, 'dcr:Event')) {
-    actions['edit-variables'] = {
-      group: 'annotate',
-      className: 'bpmn-icon-data-store',
-      title: 'Edit data variables',
-      action: {
-        click: function(evt, el) {
-          evt.stopPropagation();
-          self.openEventVariablesPanel(el);
-        }
-      }
-    };
-  }
-
   if (is(element, 'dcr:Event') || is(element, 'dcr:SubProcess')) {
     actions['edit-metadata'] = {
       group: 'annotate',
@@ -288,7 +274,7 @@ GuardsAndTimeProvider.prototype.openRelationPanel = function(element, pendingTyp
           return;
         }
         if (self._isVariableNameTakenElsewhere(targetBo.id, target)) {
-          errEl.textContent = 'Variable "' + targetBo.id + '" is already declared on another event.';
+          errEl.textContent = 'Variable "' + targetBo.id + '" is already declared on another activity.';
           return;
         }
         targetEventData = self._moddle.create('dcr:EventData', {
@@ -325,144 +311,56 @@ GuardsAndTimeProvider.prototype.openRelationPanel = function(element, pendingTyp
   });
 };
 
-// ── Event variables panel ─────────────────────────────────────────────────
+// ── Activity variable helpers ─────────────────────────────────────────────
 
-GuardsAndTimeProvider.prototype.openEventVariablesPanel = function(element) {
-  var self = this;
-  var bo = getBusinessObject(element);
+function eventVariableState(eventData) {
+  return eventData ? {
+    name: String(eventData.name || ''),
+    type: String(eventData.type || 'String'),
+    default: eventData['default'] !== undefined ? String(eventData['default']) : ''
+  } : null;
+}
 
-  var existing = bo.get('eventData');
-  var editVar = existing
-    ? { name: String(existing.name || ''), type: String(existing.type || 'String'), default: existing['default'] !== undefined ? String(existing['default']) : '' }
-    : null;
-
-  var panel = this._makePanel();
-  panel.style.minWidth = '340px';
-
-  function defaultFieldHtml(v) {
-    if (v.type === 'Int') {
-      return (
-        '<div style="display:flex;align-items:stretch;border:1px solid #ccc;border-radius:4px;overflow:hidden;margin-top:8px">' +
-          '<button id="_var_dec" style="padding:4px 10px;border:none;border-right:1px solid #ccc;cursor:pointer;background:#f5f5f5;font-size:15px;line-height:1">&#x2212;</button>' +
-          '<input id="_var_default" type="number" value="' + _esc(v.default || '') + '"' +
-            ' placeholder="default"' +
-            ' style="flex:1;min-width:0;padding:5px 4px;border:none;text-align:center;font-size:13px;-moz-appearance:textfield"/>' +
-          '<button id="_var_inc" style="padding:4px 10px;border:none;border-left:1px solid #ccc;cursor:pointer;background:#f5f5f5;font-size:15px;line-height:1">&#x2b;</button>' +
-        '</div>'
-      );
-    }
-    if (v.type === 'Bool') {
-      return (
-        '<select id="_var_default" style="width:100%;margin-top:8px;padding:5px 4px;border:1px solid #ccc;border-radius:4px;font-size:13px">' +
-          '<option value=""'      + (!v.default             ? ' selected' : '') + '></option>' +
-          '<option value="true"'  + (v.default === 'true'  ? ' selected' : '') + '>true</option>' +
-          '<option value="false"' + (v.default === 'false' ? ' selected' : '') + '>false</option>' +
-        '</select>'
-      );
-    }
+function eventVariableDefaultHtml(variable) {
+  if (variable.type === 'Int') {
     return (
-      '<input id="_var_default" type="text" value="' + _esc(v.default || '') + '"' +
-        ' placeholder="default (optional)"' +
-        ' style="width:100%;box-sizing:border-box;margin-top:8px;padding:5px 8px;border:1px solid #ccc;border-radius:4px;font-size:13px"/>'
+      '<div style="display:flex;align-items:stretch;border:1px solid #ccc;border-radius:4px;overflow:hidden;margin-top:8px">' +
+        '<button id="_metadata_var_dec" type="button" style="padding:4px 10px;border:none;border-right:1px solid #ccc;cursor:pointer;background:#f5f5f5;font-size:15px;line-height:1">&#x2212;</button>' +
+        '<input id="_metadata_var_default" type="number" value="' + _esc(variable.default || '') + '" placeholder="default"' +
+          ' style="flex:1;min-width:0;padding:5px 4px;border:none;text-align:center;font-size:13px;-moz-appearance:textfield"/>' +
+        '<button id="_metadata_var_inc" type="button" style="padding:4px 10px;border:none;border-left:1px solid #ccc;cursor:pointer;background:#f5f5f5;font-size:15px;line-height:1">&#x2b;</button>' +
+      '</div>'
     );
   }
-
-  function render() {
-    panel.innerHTML =
-      '<div style="font-weight:700;font-size:14px;margin-bottom:14px">' +
-        'Data Variable &mdash; ' + _esc(bo.get('label') || bo.id) +
-      '</div>' +
-      (editVar
-        ? '<div style="margin-bottom:12px">' +
-            '<label style="font-weight:600;display:block;margin-bottom:4px">Name</label>' +
-            '<input id="_var_name" type="text" value="' + _esc(editVar.name) + '"' +
-              ' placeholder="variable name"' +
-              ' style="width:100%;box-sizing:border-box;padding:5px 8px;border:1px solid #ccc;border-radius:4px;font-size:13px"/>' +
-            '<label style="font-weight:600;display:block;margin-top:8px;margin-bottom:4px">Type</label>' +
-            '<select id="_var_type" style="width:100%;padding:5px 4px;border:1px solid #ccc;border-radius:4px;font-size:13px">' +
-              '<option value="String"' + (editVar.type === 'String' ? ' selected' : '') + '>String</option>' +
-              '<option value="Int"'    + (editVar.type === 'Int'    ? ' selected' : '') + '>Int</option>' +
-              '<option value="Bool"'   + (editVar.type === 'Bool'   ? ' selected' : '') + '>Bool</option>' +
-            '</select>' +
-            '<label style="font-weight:600;display:block;margin-top:8px;margin-bottom:4px">Default</label>' +
-            defaultFieldHtml(editVar) +
-            '<button id="_var_clear" style="margin-top:10px;padding:4px 10px;border:1px solid #dc3545;border-radius:4px;cursor:pointer;background:white;color:#dc3545;font-size:12px">Remove variable</button>' +
-          '</div>'
-        : '<button id="_var_add" style="padding:4px 12px;border:1px solid #2196F3;border-radius:4px;' +
-            'cursor:pointer;background:white;color:#2196F3;margin-bottom:14px">+ Add Variable</button>') +
-      '<div id="_var_err" style="color:#dc3545;font-size:11px;min-height:16px;margin-bottom:6px"></div>' +
-      '<div style="display:flex;gap:8px;justify-content:flex-end">' +
-        '<button id="_var_cancel" style="padding:6px 14px;border:1px solid #ccc;border-radius:4px;cursor:pointer;background:white">Cancel</button>' +
-        '<button id="_var_save" style="padding:6px 14px;border:none;border-radius:4px;cursor:pointer;background:#28a745;color:white;font-weight:bold">Save</button>' +
-      '</div>';
-
-    if (editVar) {
-      panel.querySelector('#_var_name').addEventListener('input', function() { editVar.name = this.value; });
-      panel.querySelector('#_var_type').addEventListener('change', function() {
-        editVar.type = this.value;
-        editVar.default = '';
-        render();
-      });
-      panel.querySelector('#_var_default').addEventListener('input', function() { editVar.default = this.value; });
-      panel.querySelector('#_var_default').addEventListener('change', function() { editVar.default = this.value; });
-
-      var decBtn = panel.querySelector('#_var_dec');
-      if (decBtn) decBtn.addEventListener('click', function() {
-        editVar.default = String((parseInt(editVar.default || '0', 10)) - 1);
-        render();
-      });
-      var incBtn = panel.querySelector('#_var_inc');
-      if (incBtn) incBtn.addEventListener('click', function() {
-        editVar.default = String((parseInt(editVar.default || '0', 10)) + 1);
-        render();
-      });
-
-      panel.querySelector('#_var_clear').addEventListener('click', function() {
-        editVar = null;
-        render();
-      });
-    } else {
-      panel.querySelector('#_var_add').addEventListener('click', function() {
-        editVar = { name: '', type: 'String', default: '' };
-        render();
-        setTimeout(function() { var n = panel.querySelector('#_var_name'); if (n) n.focus(); }, 0);
-      });
-    }
-
-    panel.querySelector('#_var_cancel').addEventListener('click', function() { self._closePanel(); });
-
-    panel.querySelector('#_var_save').addEventListener('click', function() {
-      if (!editVar) {
-        self._modeling.updateProperties(element, { eventData: undefined });
-        self._closePanel();
-        return;
-      }
-      var name = editVar.name.trim();
-      var errEl = panel.querySelector('#_var_err');
-      if (!name) {
-        if (errEl) errEl.textContent = 'Variable name is required.';
-        return;
-      }
-      if (self._isVariableNameTakenElsewhere(name, element)) {
-        if (errEl) errEl.textContent = 'Variable "' + name + '" is already declared on another event.';
-        return;
-      }
-      var obj = self._moddle.create('dcr:EventData', { name: name, type: editVar.type });
-      if ((editVar.default || '').trim()) obj['default'] = editVar.default.trim();
-      self._modeling.updateProperties(element, { eventData: obj });
-      self._closePanel();
-    });
+  if (variable.type === 'Bool') {
+    return (
+      '<select id="_metadata_var_default" style="width:100%;margin-top:8px;padding:5px 4px;border:1px solid #ccc;border-radius:4px;font-size:13px">' +
+        '<option value=""' + (!variable.default ? ' selected' : '') + '></option>' +
+        '<option value="true"' + (variable.default === 'true' ? ' selected' : '') + '>true</option>' +
+        '<option value="false"' + (variable.default === 'false' ? ' selected' : '') + '>false</option>' +
+      '</select>'
+    );
   }
+  return (
+    '<input id="_metadata_var_default" type="text" value="' + _esc(variable.default || '') + '"' +
+      ' placeholder="default (optional)"' +
+      ' style="width:100%;box-sizing:border-box;margin-top:8px;padding:5px 8px;border:1px solid #ccc;border-radius:4px;font-size:13px"/>'
+  );
+}
 
-  render();
+function defaultToolVariableName(provider, element, variable) {
+  var rawName = variable && variable.name.trim() || getBusinessObject(element).id || 'result';
+  var baseName = rawName.replace(/[^A-Za-z0-9_]/g, '_');
+  if (!/^[A-Za-z_]/.test(baseName)) baseName = '_' + baseName;
+  var name = baseName || 'result';
+  var suffix = 2;
+  while (provider._isVariableNameTakenElsewhere(name, element)) {
+    name = baseName + '_' + suffix++;
+  }
+  return name;
+}
 
-  panel.addEventListener('keydown', function(e) {
-    e.stopPropagation();
-    if (e.key === 'Escape') self._closePanel();
-  });
-};
-
-// ── Event metadata panel ──────────────────────────────────────────────────
+// ── Activity metadata panel ───────────────────────────────────────────────
 
 function computationTokenType(token) {
   if (token && typeof token === 'object' && Array.isArray(token.tuple)) {
@@ -644,6 +542,10 @@ ComputationEditor.prototype._appendActions = function(row, index) {
 GuardsAndTimeProvider.prototype.openMetadataPanel = function(element) {
   var self = this;
   var bo = getBusinessObject(element);
+  var isEvent = is(element, 'dcr:Event');
+  var supportsDataVariable = isEvent || is(element, 'dcr:SubProcess');
+  var editVariable = supportsDataVariable ? eventVariableState(bo.get('eventData')) : null;
+  var variableChanged = false;
   var panel = this._makePanel();
   var originalComputation = bo.get('computation');
   var parsed = parseComputation(originalComputation);
@@ -655,6 +557,8 @@ GuardsAndTimeProvider.prototype.openMetadataPanel = function(element) {
     '<button id="_metadata_generate_question" type="button"' +
       ' style="padding:4px 9px;border:1px solid #aaa;border-radius:4px;background:white;cursor:pointer">Generate question</button>' : '';
   panel.style.minWidth = '620px';
+  panel.style.maxHeight = '85vh';
+  panel.style.overflowY = 'auto';
 
   var toolOptions = '<option value="">None</option>';
   (toolCalls || []).forEach(function(tool) {
@@ -699,6 +603,12 @@ GuardsAndTimeProvider.prototype.openMetadataPanel = function(element) {
         _esc(bo.get('priority') === undefined ? '' : String(bo.get('priority'))) + '"' +
         ' style="width:100%;box-sizing:border-box;padding:6px 8px;border:1px solid #ccc;border-radius:4px;font:13px sans-serif"/>' +
     '</div>' +
+    (supportsDataVariable
+      ? '<div style="margin-bottom:12px">' +
+          '<label style="font-weight:600;display:block;margin-bottom:4px">Data variable</label>' +
+          '<div id="_metadata_variable"></div>' +
+        '</div>'
+      : '') +
     '<div style="margin-bottom:12px">' +
       '<label style="font-weight:600;display:block;margin-bottom:4px">Tool call</label>' +
       '<select id="_metadata_tool"' + (toolCalls === null ? ' disabled' : '') +
@@ -727,6 +637,85 @@ GuardsAndTimeProvider.prototype.openMetadataPanel = function(element) {
   var tool = panel.querySelector('#_metadata_tool');
   var error = panel.querySelector('#_metadata_err');
   tool.value = originalTool || '';
+
+  function renderVariableEditor() {
+    var container = panel.querySelector('#_metadata_variable');
+    if (!container) return;
+    if (tool.value) {
+      container.innerHTML =
+        '<div style="padding:8px;border:1px solid #d5d9df;border-radius:4px;background:#f7f8fa;color:#555">' +
+          'Tool result variable <strong>' +
+            _esc(defaultToolVariableName(self, element, editVariable)) +
+          '</strong> is provided automatically as String and cannot take user input.' +
+        '</div>';
+      return;
+    }
+    container.innerHTML = editVariable
+      ? '<div>' +
+          '<label style="display:block;margin-bottom:4px">Name</label>' +
+          '<input id="_metadata_var_name" type="text" value="' + _esc(editVariable.name) + '" placeholder="variable name"' +
+            ' style="width:100%;box-sizing:border-box;padding:5px 8px;border:1px solid #ccc;border-radius:4px;font-size:13px"/>' +
+          '<label style="display:block;margin-top:8px;margin-bottom:4px">Type</label>' +
+          '<select id="_metadata_var_type" style="width:100%;padding:5px 4px;border:1px solid #ccc;border-radius:4px;font-size:13px">' +
+            '<option value="String"' + (editVariable.type === 'String' ? ' selected' : '') + '>String</option>' +
+            '<option value="Int"' + (editVariable.type === 'Int' ? ' selected' : '') + '>Int</option>' +
+            '<option value="Bool"' + (editVariable.type === 'Bool' ? ' selected' : '') + '>Bool</option>' +
+          '</select>' +
+          '<label style="display:block;margin-top:8px;margin-bottom:4px">Default</label>' +
+          eventVariableDefaultHtml(editVariable) +
+          '<button id="_metadata_var_clear" type="button" style="margin-top:10px;padding:4px 10px;border:1px solid #dc3545;border-radius:4px;cursor:pointer;background:white;color:#dc3545;font-size:12px">Remove variable</button>' +
+        '</div>'
+      : '<button id="_metadata_var_add" type="button" style="padding:4px 12px;border:1px solid #2196F3;border-radius:4px;cursor:pointer;background:white;color:#2196F3">+ Add variable</button>';
+
+    if (!editVariable) {
+      container.querySelector('#_metadata_var_add').addEventListener('click', function() {
+        editVariable = { name: '', type: 'String', default: '' };
+        variableChanged = true;
+        renderVariableEditor();
+        panel.querySelector('#_metadata_var_name').focus();
+      });
+      return;
+    }
+
+    container.querySelector('#_metadata_var_name').addEventListener('input', function() {
+      editVariable.name = this.value;
+      variableChanged = true;
+    });
+    container.querySelector('#_metadata_var_type').addEventListener('change', function() {
+      editVariable.type = this.value;
+      editVariable.default = '';
+      variableChanged = true;
+      renderVariableEditor();
+    });
+    var defaultField = container.querySelector('#_metadata_var_default');
+    defaultField.addEventListener('input', function() {
+      editVariable.default = this.value;
+      variableChanged = true;
+    });
+    defaultField.addEventListener('change', function() {
+      editVariable.default = this.value;
+      variableChanged = true;
+    });
+    var decrement = container.querySelector('#_metadata_var_dec');
+    if (decrement) decrement.addEventListener('click', function() {
+      editVariable.default = String(parseInt(editVariable.default || '0', 10) - 1);
+      variableChanged = true;
+      renderVariableEditor();
+    });
+    var increment = container.querySelector('#_metadata_var_inc');
+    if (increment) increment.addEventListener('click', function() {
+      editVariable.default = String(parseInt(editVariable.default || '0', 10) + 1);
+      variableChanged = true;
+      renderVariableEditor();
+    });
+    container.querySelector('#_metadata_var_clear').addEventListener('click', function() {
+      editVariable = null;
+      variableChanged = true;
+      renderVariableEditor();
+    });
+  }
+
+  renderVariableEditor();
   var computationEditor = new ComputationEditor(
     panel.querySelector('#_metadata_computation_rows'),
     parsed.tokens,
@@ -768,6 +757,7 @@ GuardsAndTimeProvider.prototype.openMetadataPanel = function(element) {
   tool.addEventListener('change', function() {
     toolChanged = true;
     if (tool.value) computationEditor.ensureToolInvocation();
+    renderVariableEditor();
   });
   description.focus();
   panel.querySelector('#_metadata_cancel').addEventListener('click', function() {
@@ -789,7 +779,7 @@ GuardsAndTimeProvider.prototype.openMetadataPanel = function(element) {
       error.textContent = computationError;
       return;
     }
-    self._modeling.updateProperties(element, {
+    var properties = {
       label: label.value.trim() || undefined,
       role: role.value.trim() || undefined,
       description: description.value.trim() || undefined,
@@ -799,7 +789,40 @@ GuardsAndTimeProvider.prototype.openMetadataPanel = function(element) {
         (computationEditor.computation.length ?
           JSON.stringify(computationEditor.computation) : undefined) :
         originalComputation
-    });
+    };
+    if (supportsDataVariable && tool.value) {
+      properties.eventData = self._moddle.create('dcr:EventData', {
+        name: defaultToolVariableName(self, element, editVariable),
+        type: 'String'
+      });
+    } else if (supportsDataVariable && variableChanged) {
+      if (editVariable) {
+        var variableName = editVariable.name.trim();
+        if (!variableName) {
+          error.textContent = 'Variable name is required.';
+          return;
+        }
+        if (self._isVariableNameTakenElsewhere(variableName, element)) {
+          error.textContent = 'Variable "' + variableName + '" is already declared on another activity.';
+          return;
+        }
+        properties.eventData = self._moddle.create('dcr:EventData', {
+          name: variableName,
+          type: editVariable.type
+        });
+        if (editVariable.default.trim()) {
+          properties.eventData['default'] = editVariable.default.trim();
+        }
+      } else {
+        properties.eventData = undefined;
+      }
+    }
+    if (tool.value) {
+      properties.takesInput = false;
+    } else if (originalTool && toolChanged) {
+      properties.takesInput = undefined;
+    }
+    self._modeling.updateProperties(element, properties);
     self._closePanel();
   });
   panel.addEventListener('keydown', function(e) {
@@ -826,7 +849,7 @@ function extractGuardVarNames(guardVal) {
 GuardsAndTimeProvider.prototype._allVariableNames = function() {
   var names = new Set();
   this._elementRegistry.filter(function(el) {
-    return el.type === 'dcr:Event';
+    return el.type === 'dcr:Event' || el.type === 'dcr:SubProcess';
   }).forEach(function(el) {
     var bo = getBusinessObject(el);
     var v = bo.get('eventData');
@@ -837,7 +860,7 @@ GuardsAndTimeProvider.prototype._allVariableNames = function() {
 
 GuardsAndTimeProvider.prototype._isVariableNameTakenElsewhere = function(name, element) {
   return this._elementRegistry.filter(function(el) {
-    return el.type === 'dcr:Event' && el !== element;
+    return (el.type === 'dcr:Event' || el.type === 'dcr:SubProcess') && el !== element;
   }).some(function(el) {
     var v = getBusinessObject(el).get('eventData');
     return v && v.name === name;
@@ -856,7 +879,7 @@ GuardsAndTimeProvider.prototype._validateGuard = function(guardVal, pendingVaria
   }
   for (var name of usedVars) {
     if (!knownVars.has(name)) {
-      return 'Variable "' + name + '" is not defined on any event in this graph.';
+      return 'Variable "' + name + '" is not defined on any activity in this graph.';
     }
   }
   return null;
@@ -869,7 +892,7 @@ GuardsAndTimeProvider.prototype._validateValue = function(value, pendingVariable
   if (pendingVariable) knownVars.add(pendingVariable);
   for (var name of extractGuardVarNames(value)) {
     if (!knownVars.has(name)) {
-      return 'Variable "' + name + '" is not defined on any event in this graph.';
+      return 'Variable "' + name + '" is not defined on any activity in this graph.';
     }
   }
   return null;

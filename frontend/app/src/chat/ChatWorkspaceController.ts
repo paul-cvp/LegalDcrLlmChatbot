@@ -17,12 +17,12 @@ import { ChatSessionRepository } from "./sessionRepository";
 
 type RagSettings = Pick<
   ChatSettings,
-  "searchIndex" | "suggestFollowupQuestions"
+  "searchIndex" | "suggestFollowupQuestions" | "useCitizenInformation"
 >;
 
 export interface ChatRequestOptions {
   citizenInformation?: string;
-  useCitizenData?: boolean;
+  useCitizenInformation?: boolean;
   signal?: AbortSignal;
 }
 
@@ -39,7 +39,7 @@ function withOptionalContext<Request extends ChatResponseRequest>(
 }
 
 function dcrMetadata(options: ChatRequestOptions) {
-  return options.useCitizenData
+  return options.useCitizenInformation
     ? { metadata: { use_citizen_data: true } as const }
     : {};
 }
@@ -259,5 +259,6 @@ export function ragMetadata(settings: RagSettings): RagChatMetadata {
   return {
     search_indexes: [...search_indexes],
     generate_followups: settings.suggestFollowupQuestions,
+    use_citizen_data: settings.useCitizenInformation,
   };
 }

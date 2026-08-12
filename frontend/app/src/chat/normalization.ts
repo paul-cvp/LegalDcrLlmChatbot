@@ -1,12 +1,10 @@
-import type { ChatHistoryEntry, RagEvidence, RagSearchIndex } from "../api/chat";
+import type { ChatHistoryEntry, RagEvidence } from "../api/chat";
 import type {
   ChatMessageEnrichment,
   StoredChatCitation,
   StoredChatMessage,
   StoredSupportingContent,
 } from "./models";
-
-export type DcrToolCall = "find_relevant_laws" | "find_similar_cases";
 
 export interface DcrActivityMetadata {
   id: string;
@@ -26,7 +24,7 @@ export interface NormalizedEvidence {
 export interface DcrToolEvidence extends NormalizedEvidence {
   activityId: string;
   historyIndex: number;
-  toolCall: DcrToolCall;
+  toolCall: string;
   text: string;
 }
 
@@ -79,7 +77,7 @@ export function parseDcrActivities(graphXml: string): DcrActivityMetadata[] {
         id,
         label: element.getAttribute("label") ?? element.getAttribute("description") ?? id,
         role: element.getAttribute("role") ?? undefined,
-        toolCall: element.getAttribute("toolCall") ?? undefined,
+        toolCall: element.getAttribute("toolCall")?.trim() || undefined,
         included: xmlBoolean(element.getAttribute("included"), true),
         pending: xmlBoolean(element.getAttribute("pending"), false),
         executed: xmlBoolean(element.getAttribute("executed"), false),
@@ -151,25 +149,26 @@ export function extractBracketCitations(text: string): ParsedCitation[] {
   return citations;
 }
 
-/** Extracts newly executed legal-search Robot results from backend history. */
+/** Extracts newly executed tool results from backend history. */
 export function extractDcrToolEvidence(
   previousHistory: readonly ChatHistoryEntry[],
   currentHistory: readonly ChatHistoryEntry[],
   graphXml: string,
 ): DcrToolEvidence[] {
   const startIndex = commonHistoryPrefix(previousHistory, currentHistory);
-  const tools = parseDcrActivities(graphXml).filter(isSupportedToolActivity);
+  const tools = parseDcrActivities(graphXml).filter(isToolActivity);
 
   return currentHistory.slice(startIndex).flatMap((entry, offset) => {
-    if (
-      entry.chat_role !== "assistant"
-      || canonicalizeDcrRole(entry.dcr_role) !== "Robot"
-    ) return [];
+    if (entry.chat_role !== "assistant") return [];
 
-    const activity = tools.find((item) => robotHistoryMatches(entry.item, item.label));
-    if (!activity || !isDcrToolCall(activity.toolCall)) return [];
+    const activityId = stringMetadata(entry.metadata?.activity_id);
+    const activityLabel = stringMetadata(entry.metadata?.activity_label);
+    const activity = tools.find((item) => activityIdMatches(item.id, activityId))
+      ?? tools.find((item) => item.label === activityLabel)
+      ?? tools.find((item) => activityHistoryMatches(entry.item, item.label));
+    if (!activity) return [];
     const historyIndex = startIndex + offset;
-    const text = robotResult(entry.item);
+    const text = activityResult(entry.item);
     const kind = evidenceKind(activity.toolCall);
     const citations = extractBracketCitations(text).map((citation, index) => ({
       id: `dcr-${historyIndex}-${index}-${encodeURIComponent(citation.source)}`,
@@ -300,11 +299,21 @@ function commonHistoryPrefix(
   return index;
 }
 
-function robotHistoryMatches(historyItem: string, label: string): boolean {
-  return historyItem.startsWith(`Robot activity ${label} answering `);
+function activityHistoryMatches(historyItem: string, label: string): boolean {
+  return historyItem.startsWith(`Robot activity ${label} `);
 }
 
-function robotResult(historyItem: string): string {
+function activityIdMatches(graphId: string, historyId: string | undefined): boolean {
+  if (!historyId) return false;
+  return graphId === historyId
+    || graphId === `Event_${historyId}`
+    || graphId === `SubProcess_${historyId}`;
+}
+
+function activityResult(historyItem: string): string {
+  const data = historyItem.match(/executed with data '([\s\S]*)'\.?$/)?.[1];
+  if (data !== undefined) return data;
+
   const marker = " executed with ";
   const markerIndex = historyItem.indexOf(marker);
   return markerIndex < 0 ? historyItem : historyItem.slice(markerIndex + marker.length);
@@ -319,18 +328,16 @@ function stringMetadata(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
-function isSupportedToolActivity(
+function isToolActivity(
   activity: DcrActivityMetadata,
-): activity is DcrActivityMetadata & { toolCall: DcrToolCall } {
-  return canonicalizeDcrRole(activity.role) === "Robot" && isDcrToolCall(activity.toolCall);
+): activity is DcrActivityMetadata & { toolCall: string } {
+  return Boolean(activity.toolCall?.trim());
 }
 
-function isDcrToolCall(value: string | undefined): value is DcrToolCall {
-  return value === "find_relevant_laws" || value === "find_similar_cases";
-}
-
-function evidenceKind(index: RagSearchIndex | DcrToolCall): "law" | "case" {
-  return index === "find_relevant_laws" ? "law" : "case";
+function evidenceKind(index: string): "law" | "case" | "other" {
+  if (index === "find_relevant_laws") return "law";
+  if (index === "find_similar_cases") return "case";
+  return "other";
 }
 
 function xmlBoolean(value: string | null, fallback: boolean): boolean {

@@ -59,7 +59,6 @@ export interface ChatSettings {
   dcrRole: DcrRole;
   robotAutoExecutionsPerActivity: number;
   useCitizenInformation: boolean;
-  useCitizenData: boolean;
   searchIndex: SearchIndex;
   suggestFollowupQuestions: boolean;
   retrieveCount: number;

@@ -20,6 +20,18 @@ const GRAPH_XML = `<dcr:definitions xmlns:dcr="http://tk/schema/dcr">
   </dcr:dcrGraph>
 </dcr:definitions>`;
 
+const ALL_TOOLS_GRAPH_XML = `<dcr:definitions xmlns:dcr="http://tk/schema/dcr">
+  <dcr:dcrGraph id="graph">
+    <dcr:event id="Event_law" label="Relevant laws" role="Robot"
+      toolCall="find_relevant_laws" included="true" />
+    <dcr:event id="Event_cases" label="Similar cases" role="Citizen"
+      toolCall="find_similar_cases" included="true" />
+    <dcr:event id="Event_summary" label="Case summary" role="Case worker"
+      toolCall="summarize_case_history" included="true" />
+    <dcr:event id="Event_review" label="Review" role="Case worker" included="true" />
+  </dcr:dcrGraph>
+</dcr:definitions>`;
+
 function history(
   item: string,
   chatRole = "assistant",
@@ -108,6 +120,65 @@ describe("DCR normalization", () => {
       source: "case.json",
       page: undefined,
     }]);
+  });
+
+  it("extracts every tool result by activity metadata and backend message shape", () => {
+    const previous = [history("Start", "user", "Citizen")];
+    const current: ChatHistoryEntry[] = [
+      ...previous,
+      toolHistory(
+        "law",
+        "Relevant laws",
+        "Robot",
+        "Robot activity Relevant laws answering query 'What applies?'executed with data 'Law result [laws/support.pdf#page=4]'.",
+      ),
+      toolHistory(
+        "cases",
+        "Similar cases",
+        "Citizen",
+        "Robot activity Similar cases executed with data 'Case result [cases/example.json]'.",
+      ),
+      toolHistory(
+        "summary",
+        "Case summary",
+        "Case worker",
+        "Robot activity Case summary answering query 'Summarize' toward completion executed with data 'Summary [laws/summary.pdf#page=2]'.",
+      ),
+      toolHistory(
+        "review",
+        "Review",
+        "Case worker",
+        "Robot activity Review executed with data 'Reviewed'.",
+      ),
+    ];
+
+    const evidence = extractDcrToolEvidence(previous, current, ALL_TOOLS_GRAPH_XML);
+
+    expect(evidence.map(({ activityId, toolCall, text }) => ({
+      activityId,
+      toolCall,
+      text,
+    }))).toEqual([
+      {
+        activityId: "Event_law",
+        toolCall: "find_relevant_laws",
+        text: "Law result [laws/support.pdf#page=4]",
+      },
+      {
+        activityId: "Event_cases",
+        toolCall: "find_similar_cases",
+        text: "Case result [cases/example.json]",
+      },
+      {
+        activityId: "Event_summary",
+        toolCall: "summarize_case_history",
+        text: "Summary [laws/summary.pdf#page=2]",
+      },
+    ]);
+    expect(evidence.map(({ supportingContent }) => supportingContent[0]?.content))
+      .toEqual(evidence.map(({ text }) => text));
+    expect(evidence.map(({ citations }) => citations[0]?.kind))
+      .toEqual(["law", "case", "other"]);
   });
 
   it("diffs automatic Robot executions but ignores Caseworker confirmations", () => {
@@ -207,3 +278,20 @@ describe("DCR normalization", () => {
     });
   });
 });
+
+function toolHistory(
+  activityId: string,
+  activityLabel: string,
+  dcrRole: string,
+  item: string,
+): ChatHistoryEntry {
+  return {
+    item,
+    chat_role: "assistant",
+    dcr_role: dcrRole,
+    metadata: {
+      activity_id: activityId,
+      activity_label: activityLabel,
+    },
+  };
+}

@@ -101,9 +101,13 @@ describe("activity computations and tool calls", () => {
     expect(Array.from(document.querySelectorAll("._metadata_token_type"))
       .map((field) => field.value))
       .toEqual(["string", "number", "boolean", "tuple2", "tuple4"]);
+    expect(document.querySelector("#_metadata_var_name").value).toBe("threshold");
     const tool = document.querySelector("#_metadata_tool");
     tool.value = "find_relevant_laws";
     tool.dispatchEvent(new Event("change"));
+    expect(document.querySelector("#_metadata_var_name")).toBeNull();
+    expect(document.querySelector("#_metadata_variable").textContent)
+      .toContain("provided automatically as String");
     tool.dispatchEvent(new Event("change"));
     document.querySelector("#_metadata_add_token").click();
     const types = document.querySelectorAll("._metadata_token_type");
@@ -118,12 +122,43 @@ describe("activity computations and tool calls", () => {
 
     const tokens = JSON.parse(source.businessObject.computation);
     expect(source.businessObject.toolCall).toBe("find_relevant_laws");
+    expect(source.businessObject.eventData).toMatchObject({
+      name: "threshold",
+      type: "String",
+    });
+    expect(source.businessObject.takesInput).toBe(false);
     expect(tokens.filter((token) => token.tuple?.[0] === "source" && token.tuple?.[1] === "tool"))
       .toHaveLength(1);
     expect(tokens.at(-1)).toBe(4.5);
     modeler.get("commandStack").undo();
     expect(source.businessObject.toolCall).toBeUndefined();
     expect(source.businessObject.computation).toBe(computation);
+    expect(source.businessObject.eventData).toMatchObject({
+      name: "threshold",
+      type: "Bool",
+    });
+    modeler.destroy();
+  });
+
+  it("creates a non-input String result variable for a selected event tool", async () => {
+    const modeler = await createModeler();
+    const child = modeler.getElementRegistry().get("Child");
+    const provider = modeler.get("guardsAndTimeProvider");
+    provider.setToolCalls(tools);
+    provider.openMetadataPanel(child);
+
+    expect(document.querySelector("#_metadata_var_add")).not.toBeNull();
+    const tool = document.querySelector("#_metadata_tool");
+    tool.value = "find_relevant_laws";
+    tool.dispatchEvent(new Event("change"));
+    expect(document.querySelector("#_metadata_var_add")).toBeNull();
+    document.querySelector("#_metadata_save").click();
+
+    expect(child.businessObject.eventData).toMatchObject({
+      name: "Child",
+      type: "String",
+    });
+    expect(child.businessObject.takesInput).toBe(false);
     modeler.destroy();
   });
 
@@ -163,10 +198,17 @@ describe("activity computations and tool calls", () => {
 
     provider.openMetadataPanel(flow);
     expect(document.querySelector("#_metadata_tool").disabled).toBe(true);
+    expect(document.querySelector("#_metadata_variable").textContent)
+      .toContain("provided automatically as String");
     document.querySelector("#_metadata_description").value = "Updated";
     document.querySelector("#_metadata_save").click();
     expect(flow.businessObject.toolCall).toBe("find_similar_cases");
     expect(flow.businessObject.description).toBe("Updated");
+    expect(flow.businessObject.eventData).toMatchObject({
+      name: "Flow",
+      type: "String",
+    });
+    expect(flow.businessObject.takesInput).toBe(false);
 
     provider.setToolCalls(tools);
     provider.openMetadataPanel(flow);
@@ -178,6 +220,39 @@ describe("activity computations and tool calls", () => {
     expect(JSON.parse(flow.businessObject.computation)).toEqual([
       { tuple: ["source", "tool"] },
     ]);
+    modeler.destroy();
+  });
+
+  it("edits subprocess data variables in subprocess metadata", async () => {
+    const modeler = await createModeler();
+    const flow = modeler.getElementRegistry().get("Flow");
+    const provider = modeler.get("guardsAndTimeProvider");
+    provider.setToolCalls(tools);
+    provider.openMetadataPanel(flow);
+
+    const tool = document.querySelector("#_metadata_tool");
+    tool.value = "";
+    tool.dispatchEvent(new Event("change"));
+    document.querySelector("#_metadata_var_add").click();
+    const name = document.querySelector("#_metadata_var_name");
+    name.value = "flowResult";
+    name.dispatchEvent(new Event("input"));
+    document.querySelector("#_metadata_save").click();
+
+    expect(flow.businessObject.toolCall).toBeUndefined();
+    expect(flow.businessObject.eventData).toMatchObject({
+      name: "flowResult",
+      type: "String",
+    });
+    expect(flow.businessObject.takesInput).toBeUndefined();
+    expect(modeler.getElementRegistry().getGraphics("Flow").textContent)
+      .toContain("flowResult");
+    const saved = await modeler.saveXML({ format: true });
+    const reparsed = await createModdle().fromXML(saved.xml, "dcr:Definitions");
+    expect(reparsed.elementsById.Flow.eventData).toMatchObject({
+      name: "flowResult",
+      type: "String",
+    });
     modeler.destroy();
   });
 

@@ -13,8 +13,8 @@ from tools.tool_call import ToolCall
 class DcrSemantics:
 
     def __init__(self,user_context:str|None=None, use_citizen_data:bool = False) -> None:
-        type(self).uc = user_context
-        type(self).use_citizen_data = use_citizen_data
+        self.uc = user_context
+        self.use_citizen_data = use_citizen_data
 
     @classmethod
     def getRelations(cls, element: DcrElement, graph: DcrGraph, yields: str=None) -> tuple[Set[DcrRelation], Set[DcrRelation]]:
@@ -108,14 +108,8 @@ class DcrSemantics:
     def parseAttribute(cls, element: str, attribute: str, e3:str = None, e4:str = None) -> any:
         match attribute:
             case "tool":
-                summarizes_graph = (
-                    e3 == "summary"
-                    or (e3 == "graph" and e4 == "executions")
-                )
-                return (
-                    f"cls.resolveAsync(cls.invoke_tool({element}, graph, "
-                    f"{summarizes_graph}))"
-                )
+                summarizes_graph = e3 == "summary" or (e3 == "graph" and e4 == "executions")
+                return f"cls.resolveAsync(cls.invoke_tool({element}, graph, {summarizes_graph}))"
             case "id":
                 return element + ".ID"
             case "included":
@@ -183,18 +177,11 @@ class DcrSemantics:
         with ThreadPoolExecutor(max_workers=1) as executor:
             return executor.submit(asyncio.run, result).result()
 
-    @classmethod
-    def invoke_tool(
-        cls,
-        element: DcrActivity,
-        graph: DcrGraph,
-        summarizes_graph: bool = False,
-    ):
+
+    def invoke_tool(cls, element: DcrActivity, graph: DcrGraph, summarizes_graph: bool = False):
         """Call a persisted tool with arguments matching its registered type."""
         tool = element.tool_call
-        summarizes_graph = summarizes_graph or (
-            ToolCall.from_callable(tool) is ToolCall.SUMMARIZE_CASE_HISTORY
-        )
+        summarizes_graph = summarizes_graph or ToolCall.from_callable(tool) is ToolCall.SUMMARIZE_CASE_HISTORY
         user_data = []
         for execution in graph.executions:
             activity = graph.getActivity(execution.activityID)
@@ -214,22 +201,19 @@ class DcrSemantics:
         if cls.use_citizen_data:
             kwargs["user_info"] = cls.uc
         argument = graph if summarizes_graph else element.description
+        print(cls.use_citizen_data, kwargs)
         return tool(argument, **kwargs)
     
-    @classmethod
     def evaluateComputation(cls, computation: DcrComputation, graph: DcrGraph, source: DcrElement=None, target: DcrElement=None) -> any:
         # Compile a temporary expression so retained XML guard tokens stay intact. graph is never empty
-        executable = " ".join(
-            cls.parseExpression(expression) for expression in computation
-        )
+        executable = " ".join(cls.parseExpression(expression) for expression in computation)
         try:
             res = eval(executable)
         except SyntaxError:
             # Only statements need exec; runtime failures must retain their cause.
             res = exec(executable)
         return res
-
-    @classmethod
+    
     def executeActivity(cls, execution: DcrExecution, graph: DcrGraph):
         activity = graph.getActivity(execution.activityID)
         if not cls.isAuthorized(activity, execution.role):
@@ -251,7 +235,10 @@ class DcrSemantics:
         if element.takesInput and input is not None:
             element.data = input
         elif element.computation is not None:
-            element.data = cls.evaluateComputation(element.computation, graph, source=element)
+            try:
+                element.data = cls.evaluateComputation(element.computation, graph, source=element)
+            except:
+                element.data = "Tool call cannot be automatically resolved by Robot activity!"
         graph.updatePending(element, False)
         element.executed = datetime.now() if executionTime is None else executionTime
 

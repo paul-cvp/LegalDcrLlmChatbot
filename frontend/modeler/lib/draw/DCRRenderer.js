@@ -473,6 +473,10 @@ export default function DCRRenderer(
         renderer('ExecutedMarker')(parentGfx, element);
       }
 
+      var eventData = element.businessObject.get('eventData');
+      if (eventData && eventData.name) {
+        renderer('VariablesBadge')(parentGfx, element, eventData.name);
+      }
 
       return rect;
     },
