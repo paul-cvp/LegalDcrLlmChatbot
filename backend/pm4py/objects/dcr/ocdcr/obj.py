@@ -183,6 +183,7 @@ class DcrActivity(DcrElement):
                  pending=False, 
                  computation: DcrComputation=None, 
                  takesInput=False, 
+                 trusted = True,
                  eventData: DcrEventData=None,
                  template=None, **kwargs):
         super().__init__(id, template=template, **kwargs)
@@ -200,9 +201,17 @@ class DcrActivity(DcrElement):
         self.__data = self.__eventData.default if self.__eventData is not None else None
         # if self.__takesInput and not self.__eventData:
         #     self.__eventData = DcrEventData()
-
+        self.__trusted = trusted # Only relevant in relation to tool calls by default it is true
         self.__tool_call = lambda x : x if template is None else template.tool_call
         self.__priority = priority if template is None else template.priority
+
+    @property
+    def trusted(self) -> bool:
+        return self.__trusted
+
+    @trusted.setter
+    def trusted(self, value: bool):
+        self.__trusted = value
 
     @property
     def tool_call(self) -> Callable:

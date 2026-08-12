@@ -106,7 +106,6 @@ class RobotExecutionPolicy:
         return denied == current
 
 class DcrChat(ChatWithHistory):
-    """just dcr no llm."""
 
     def __init__(
         self,
@@ -156,9 +155,7 @@ class DcrChat(ChatWithHistory):
         if act is None:
             raise ValidationError(f"DCR activity {act_id!r} was not found.")
         if act.role == "Robot":
-            raise ValidationError(
-                "Robot activities can only execute through the Robot permission flow."
-            )
+            raise ValidationError("Robot activities can only execute through the Robot permission flow.")
         if act.eventData is None:
             # Input-free activities execute from the user's acknowledgement.
             input_interpreted = None
@@ -185,31 +182,15 @@ class DcrChat(ChatWithHistory):
             self._robot_policy.clear_permission()
             raise ValidationError(f"DCR activity {pending.activity_id!r} was not found.")
 
-        decision = (
-            request.text
-            if type(request.text) is bool
-            else await self._i_llm_tool.get_closest_match(request.text, bool)
-        )
-        self.record_response(
-            item=f"{request.text} interpreted as Robot permission {decision}",
-            chat_role="user",
-            dcr_role=request.dcr_role,
-        )
-        LOGGER.info(
-            "DCR Chat: Robot activity %s permission interpreted as %s",
-            act.ID,
-            decision,
-        )
+        decision = request.text if type(request.text) is bool else await self._i_llm_tool.get_closest_match(request.text, bool)
+        self.record_response(item=f"{request.text} interpreted as Robot permission {decision}", chat_role="user", dcr_role=request.dcr_role)
+        LOGGER.info("DCR Chat: Robot activity %s permission interpreted as %s", act.ID, decision)
         self._robot_policy.clear_permission()
         if decision:
             return await self.execute_robot_activity(act)
 
         self._robot_policy.deny_current_occurrence(act)
-        self.record_response(
-            item=f"Permission denied. Robot activity {act.label} was not executed.",
-            chat_role="assistant",
-            dcr_role=request.dcr_role,
-        )
+        self.record_response(item=f"Permission denied. Robot activity {act.label} was not executed.", chat_role="assistant", dcr_role=request.dcr_role)
         LOGGER.info("DCR Chat: Robot activity %s permission denied", act.ID)
         return False
 
@@ -227,12 +208,7 @@ class DcrChat(ChatWithHistory):
             if activity.role == "Robot"
         ])
 
-    async def execute_robot_activity(
-        self,
-        act: DcrActivity,
-        *,
-        automatic: bool = False,
-    ) -> bool:
+    async def execute_robot_activity(self, act: DcrActivity, *, automatic: bool = False) -> bool:
         act_id = act.ID
         if act.data is not None or act.tool_call is not None:
             execution = DcrExecution(act_id, input=act.data, role=act.role)
@@ -240,8 +216,12 @@ class DcrChat(ChatWithHistory):
             self.trace.append(execution)
 
             # normalized_request = self.normalize_request(request)
+            msg = ""
+            msg += f"answering query '{act.description}'" if act.description else ""
+            msg += f"executed"
+            msg += f" with data '{act.data}'" if act.data else ""
             self.record_response(
-                item=f"Robot activity {act.label} answering {act.description} executed with {act.data}",
+                item=f"Robot activity {act.label} {msg}.",
                 chat_role="assistant",
                 dcr_role="Robot",
                 metadata={
@@ -309,26 +289,19 @@ class DcrChat(ChatWithHistory):
             robo_act = robot_acts.pop()
             if not self._robot_policy.can_execute_automatically(robo_act):
                 self._robot_policy.request_permission(robo_act)
-                LOGGER.info(
-                    "DCR Chat: requesting permission for Robot activity %s",
-                    robo_act.ID,
-                )
+                LOGGER.info("DCR Chat: requesting permission for Robot activity %s", robo_act.ID, )
                 return robo_act
             success = await self.execute_robot_activity(robo_act, automatic=True)
             if success:
                 self._robot_policy.record_automatic_execution(robo_act)
                 await self.refresh_set_of_activities()
                 robot_acts, active_role_acts, non_active_role_acts, denied_robot_acts = self.get_activities_by_role(active_role)
-                LOGGER.info(
-                    "DCR Chat: Robot activity %s executed automatically (%s/%s)",
-                    robo_act.ID,
-                    self._robot_policy.automatic_counts[robo_act.ID],
-                    self._robot_policy.automatic_limit,
+                LOGGER.info("DCR Chat: Robot activity %s executed automatically (%s/%s)", robo_act.ID, self._robot_policy.automatic_counts[robo_act.ID], self._robot_policy.automatic_limit,
                 )
         if len(active_role_acts)>0:
             print(f"[i] User in active role {active_role} needs to answer a question! From the following:")
             for act in active_role_acts:
-                print(f"[i] \t {act.label} {act.priority}")
+                print(f"[i] \t Label: {act.label} - priority: {act.priority}")
             return prioritize_user_activities(active_role_acts,self._dcr_graph, self.trace)[0]
         elif len(non_active_role_acts)>0:
             self.record_response(item=f"You don't have anything to execute! We have notified the other roles about their activities!", chat_role="assistant", dcr_role=active_role)
@@ -356,15 +329,8 @@ class DcrChat(ChatWithHistory):
             pending = self._robot_policy.pending
             if pending is not None and pending.activity_id == id:
                 role = active_role
-                question = await self._o_llm_tool.get_robot_permission_question(
-                    act,
-                    self.history[-10:],
-                )
-                LOGGER.info(
-                    "DCR Chat: asking permission for Robot activity %s: %s",
-                    act.ID,
-                    question,
-                )
+                question = await self._o_llm_tool.get_robot_permission_question(act, self.history[-10:])
+                LOGGER.info("DCR Chat: asking permission for Robot activity %s: %s", act.ID, question,)
             else:
                 role = act.role
                 question = (act.description or "").strip() or None
@@ -386,10 +352,7 @@ class DcrChat(ChatWithHistory):
         pending = self._robot_policy.pending
         if pending is not None:
             if request.act_id != pending.activity_id:
-                raise ValidationError(
-                    f"Answer the pending Robot permission for activity "
-                    f"{pending.activity_id!r} before continuing."
-                )
+                raise ValidationError(f"Answer the pending Robot permission for activity {pending.activity_id!r} before continuing.")
             await self.handle_robot_permission(request)
         elif request.act_id:
             await self.execute_activity_with_chat(request)
