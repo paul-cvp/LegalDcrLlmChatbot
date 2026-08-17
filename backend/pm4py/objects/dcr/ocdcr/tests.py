@@ -1,7 +1,9 @@
 import unittest
 
-import obj
-from semantics import DcrSemantics as sem
+from pm4py.objects.dcr.ocdcr import obj
+from pm4py.objects.dcr.ocdcr.semantics import DcrSemantics
+
+sem = DcrSemantics()
     
 class TestStandardDcr(unittest.TestCase):
     graph = None

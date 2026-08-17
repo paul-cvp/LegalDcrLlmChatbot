@@ -141,9 +141,10 @@ def test_guard_evaluation_does_not_corrupt_exported_expression():
     graph = xml_dcr_js.import_from_string(SOCIAL_SERVICE_MODEL.read_bytes())
     guarded = next(relation for relation in graph.relations if relation.guard)
     original_guard = list(guarded.guard)
+    semantics = DcrSemantics()
 
     for element in graph.elements:
-        DcrSemantics.isEnabled(element, graph)
+        semantics.isEnabled(element, graph)
 
     assert guarded.guard == original_guard
     exported = dcr_exporter.serialize(
@@ -409,7 +410,7 @@ def test_semantics_coerces_execution_input_to_declared_python_type():
     activity = DcrActivity("number", eventData=DcrEventData("number", int))
     graph = DcrGraph("typed", elements={activity})
 
-    DcrSemantics.executeActivity(DcrExecution("number", input="42"), graph)
+    DcrSemantics().executeActivity(DcrExecution("number", input="42"), graph)
 
     assert activity.data == 42
     assert type(activity.data) is int
@@ -423,7 +424,7 @@ def test_set_value_semantics_preserves_target_python_type():
         "typed", elements={source, target}, relations={relation}
     )
 
-    DcrSemantics.executeActivity(DcrExecution("source", input="41"), graph)
+    DcrSemantics().executeActivity(DcrExecution("source", input="41"), graph)
 
     assert source.data == 41
     assert target.data == 42
@@ -455,9 +456,10 @@ def test_summary_tool_computation_receives_graph_and_history(computation):
     )
     activity.tool_call = summarize
     graph = DcrGraph("case", elements={activity})
-    DcrSemantics(user_context="Citizen context", use_citizen_data=True)
-
-    DcrSemantics.executeActivity(DcrExecution("summary"), graph)
+    semantics = DcrSemantics(
+        user_context="Citizen context", use_citizen_data=True
+    )
+    semantics.executeActivity(DcrExecution("summary"), graph)
 
     assert activity.data == "Case summary"
     assert received["graph"] is graph
@@ -480,9 +482,8 @@ def test_registered_summary_tool_with_standard_token_receives_graph(monkeypatch)
     )
     activity.tool_call = ToolCall.SUMMARIZE_CASE_HISTORY
     graph = DcrGraph("case", elements={activity})
-    DcrSemantics(user_context=None, use_citizen_data=False)
-
-    DcrSemantics.executeActivity(DcrExecution("summary"), graph)
+    semantics = DcrSemantics(user_context=None, use_citizen_data=False)
+    semantics.executeActivity(DcrExecution("summary"), graph)
 
     assert activity.data == "Case summary"
     assert received["tool"] is ToolCall.SUMMARIZE_CASE_HISTORY

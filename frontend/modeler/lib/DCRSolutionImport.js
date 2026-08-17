@@ -12,12 +12,22 @@ const TYPE_MAP = new Map([
   ["text", "String"],
 ]);
 
+const ELEMENT_PREFIXES = new Map([
+  ["dcr:event", "Event"],
+  ["dcr:nesting", "Nesting"],
+  ["dcr:subProcess", "SubProcess"],
+]);
+
 function asArray(value) {
   return Array.isArray(value) ? value : [];
 }
 
 function canonicalType(type) {
   return TYPE_MAP.get(String(type || "").toLowerCase());
+}
+
+function prefixedId(id, prefix) {
+  return id.startsWith(`${prefix}_`) ? id : `${prefix}_${id}`;
 }
 
 function tokenizeExpression(expression) {
@@ -138,10 +148,13 @@ function collectEvent(event, eventDataById, layoutById, eventExpressionById, eve
   }
 
   for (const eventData of custom.eventData) {
-    if (!eventData || typeof eventData !== "object" || !eventData.$) continue;
-    const name = String(eventData.$.name || "").trim();
-    const type = canonicalType(eventData.$.type);
-    if (!name && !eventData.$.type) continue;
+    if (!eventData || typeof eventData !== "object") continue;
+    const dataType = asArray(eventData.dataType)[0];
+    const solutionType = dataType?.$?.format || dataType?._ || dataType;
+    const name = String(eventData.$?.name || id || "").trim();
+    const type = canonicalType(eventData.$?.type || solutionType);
+    if (!eventData.$ && !type) continue;
+    if (!name && !eventData.$?.type) continue;
     if (!id || !name || !type) {
       throw new Error(
         "Named eventData must include an event id, a variable name, and a supported type.",
@@ -155,7 +168,7 @@ function collectEvent(event, eventDataById, layoutById, eventExpressionById, eve
     eventDataById.set(id, {
       name,
       type,
-      default: eventData.$.default,
+      default: eventData.$?.default,
     });
   }
 
@@ -268,6 +281,79 @@ function applyEditorLayout(definitions, layoutById, relationLayoutById) {
   }
 }
 
+function collectEditorIds(element, elementIds, relationIds) {
+  for (const [key, prefix] of ELEMENT_PREFIXES) {
+    for (const child of asArray(element[key])) {
+      if (child?.$?.id) {
+        elementIds.set(child.$.id, prefixedId(child.$.id, prefix));
+      }
+      collectEditorIds(child, elementIds, relationIds);
+    }
+  }
+  for (const relation of asArray(element["dcr:relation"])) {
+    if (relation?.$?.id) {
+      relationIds.set(relation.$.id, prefixedId(relation.$.id, "Relation"));
+    }
+  }
+}
+
+function rewriteComputation(value, elementIds) {
+  if (!value) return value;
+  const computation = JSON.parse(value);
+  for (const token of computation) {
+    const reference = token?.tuple;
+    if (Array.isArray(reference) && elementIds.has(reference[0])) {
+      reference[0] = elementIds.get(reference[0]);
+    }
+  }
+  return JSON.stringify(computation);
+}
+
+function normalizeEditorIds(definitions, graph) {
+  const elementIds = new Map();
+  const relationIds = new Map();
+  collectEditorIds(graph, elementIds, relationIds);
+
+  const rewriteElement = (element) => {
+    if (!element || typeof element !== "object") return;
+    if (elementIds.has(element.$?.id)) element.$.id = elementIds.get(element.$.id);
+    if (element.$?.computation) {
+      element.$.computation = rewriteComputation(element.$.computation, elementIds);
+    }
+
+    for (const relation of asArray(element["dcr:relation"])) {
+      relation.$.id = relationIds.get(relation.$.id);
+      relation.$.sourceRef = elementIds.get(relation.$.sourceRef);
+      relation.$.targetRef = elementIds.get(relation.$.targetRef);
+      for (const attribute of ["guardComputation", "valueComputation"]) {
+        if (relation.$[attribute]) {
+          relation.$[attribute] = rewriteComputation(relation.$[attribute], elementIds);
+        }
+      }
+    }
+    for (const key of ELEMENT_PREFIXES.keys()) {
+      for (const child of asArray(element[key])) rewriteElement(child);
+    }
+  };
+  rewriteElement(graph);
+
+  const plane = asArray(
+    asArray(definitions?.["dcrDi:dcrRootBoard"])[0]?.["dcrDi:dcrPlane"],
+  )[0];
+  for (const shape of asArray(plane?.["dcrDi:dcrShape"])) {
+    const boardElement = elementIds.get(shape?.$?.boardElement);
+    if (!boardElement) continue;
+    shape.$.boardElement = boardElement;
+    shape.$.id = `${boardElement}_di`;
+  }
+  for (const relation of asArray(plane?.["dcrDi:relation"])) {
+    const boardElement = relationIds.get(relation?.$?.boardElement);
+    if (!boardElement) continue;
+    relation.$.boardElement = boardElement;
+    relation.$.id = `${boardElement}_di`;
+  }
+}
+
 function expressionValue(expressionId, state) {
   const expression = state.expressionById.get(expressionId);
   if (expression === undefined) {
@@ -311,14 +397,16 @@ function addEditorMetadata(element, state) {
   for (const relation of asArray(element["dcr:relation"])) {
     const expressionId = state.relationExpressionById.get(relation?.$?.id);
     if (!expressionId) continue;
-    const attribute = relation.$.type === "setValue"
-      ? "valueComputation"
-      : "guardComputation";
-    relation.$[attribute] = parseComputation(
-      expressionValue(expressionId, state),
-      state.eventIds,
-      { source: relation.$.sourceRef, target: relation.$.targetRef },
-    );
+    const expression = expressionValue(expressionId, state);
+    const isSetValue = relation.$.type === "setValue";
+    // The modeler uses the raw expression; the backend uses its computation.
+    relation.$[isSetValue ? "value" : "guard"] = expression;
+    relation.$[isSetValue ? "valueComputation" : "guardComputation"] =
+      parseComputation(
+        expression,
+        state.eventIds,
+        { source: relation.$.sourceRef, target: relation.$.targetRef },
+      );
   }
 }
 
@@ -367,5 +455,6 @@ export default async function convertDCRSolutionForStorage(xml) {
 
   addEditorMetadata(graph, state);
   applyEditorLayout(definitions, state.layoutById, state.relationLayoutById);
+  normalizeEditorIds(definitions, graph);
   return new xml2js.Builder().buildObject(editor);
 }
