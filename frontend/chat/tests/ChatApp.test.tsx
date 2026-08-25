@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   ChatApp,
+  DEFAULT_ACTIVITY_REPETITIONS,
   DEFAULT_ROBOT_AUTO_EXECUTIONS_PER_ACTIVITY,
   type ChatAppProps,
   type ChatSettings,
@@ -16,6 +17,7 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 const settings: ChatSettings = {
   dcrRole: "Citizen",
   robotAutoExecutionsPerActivity: DEFAULT_ROBOT_AUTO_EXECUTIONS_PER_ACTIVITY,
+  activityRepetitions: DEFAULT_ACTIVITY_REPETITIONS,
   useCitizenInformation: false,
   searchIndex: "All",
   suggestFollowupQuestions: true,
@@ -139,6 +141,7 @@ describe("ChatApp", () => {
 
     expect(field("DCR Role")?.disabled).toBe(false);
     expect(field("Automatic Robot executions per activity")?.disabled).toBe(false);
+    expect(field("Repeat executed activities")?.disabled).toBe(false);
     expect(field("Use Citizen Information")?.disabled).toBe(false);
     expect(field("Search index")?.disabled).toBe(true);
     expect(field("Suggest follow-up statements")?.disabled).toBe(true);
@@ -148,6 +151,7 @@ describe("ChatApp", () => {
     render(<ChatApp {...props} mode="rag" hasCachedCitizenInformation />);
     expect(field("DCR Role")?.disabled).toBe(true);
     expect(field("Automatic Robot executions per activity")?.disabled).toBe(true);
+    expect(field("Repeat executed activities")?.disabled).toBe(true);
     expect(field("Use Citizen Information")?.disabled).toBe(false);
     expect(field("Search index")?.disabled).toBe(false);
     expect(field("Suggest follow-up statements")?.disabled).toBe(false);
@@ -193,6 +197,27 @@ describe("ChatApp", () => {
     expect(onSettingsChange).toHaveBeenCalledWith({
       ...settings,
       robotAutoExecutionsPerActivity: 0,
+    });
+  });
+
+  it("configures how many times executed activities may repeat", () => {
+    const onSettingsChange = vi.fn();
+    render(<ChatApp {...props} onSettingsChange={onSettingsChange} />);
+    act(() => button("Settings")?.click());
+
+    const repeatLimit = field("Repeat executed activities") as HTMLInputElement;
+    expect(DEFAULT_ACTIVITY_REPETITIONS).toBe(0);
+    expect(repeatLimit.min).toBe("-1");
+    expect(repeatLimit.step).toBe("1");
+
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")
+        ?.set?.call(repeatLimit, "2");
+      repeatLimit.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    expect(onSettingsChange).toHaveBeenCalledWith({
+      ...settings,
+      activityRepetitions: 2,
     });
   });
 
@@ -328,6 +353,91 @@ describe("ChatApp", () => {
       "Interpreted as: True",
     );
     expect(container?.querySelectorAll(".dcrChat__message")).toHaveLength(1);
+  });
+
+  it("lets the user edit an editable answer", async () => {
+    const onEditAnswer = vi.fn().mockResolvedValue(undefined);
+    render(
+      <ChatApp
+        {...props}
+        onEditAnswer={onEditAnswer}
+        messages={[{
+          id: "answer",
+          role: "user",
+          content: "Old answer",
+          editable: true,
+        }]}
+      />,
+    );
+
+    const edit = button("✎");
+    expect(edit?.getAttribute("aria-label")).toBe("Edit answer");
+    act(() => edit?.click());
+    const textarea = container?.querySelector<HTMLTextAreaElement>('[aria-label="Edit answer text"]');
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")
+        ?.set?.call(textarea, "New answer");
+      textarea?.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => button("Save")?.click());
+
+    expect(onEditAnswer).toHaveBeenCalledWith("answer", "New answer");
+  });
+
+  it("submits Boolean and validated Integer widget values as native types", () => {
+    const onSend = vi.fn();
+    render(<ChatApp {...props} expectedAnswerType="bool" onSend={onSend} />);
+
+    act(() => button("Yes")?.click());
+    act(() => button("No")?.click());
+    expect(onSend.mock.calls).toEqual([[true], [false]]);
+
+    render(<ChatApp {...props} expectedAnswerType="int" onSend={onSend} />);
+    const input = container?.querySelector<HTMLInputElement>('[aria-label="Expected Integer answer"] input');
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")
+        ?.set?.call(input, "3.5");
+      input?.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    act(() => button("Submit")?.click());
+    expect(input?.checkValidity()).toBe(false);
+    expect(onSend).toHaveBeenCalledTimes(2);
+
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")
+        ?.set?.call(input, "4");
+      input?.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    act(() => button("Submit")?.click());
+    expect(onSend).toHaveBeenLastCalledWith(4);
+  });
+
+  it("keeps edited Boolean answers typed", async () => {
+    const onEditAnswer = vi.fn().mockResolvedValue(undefined);
+    render(
+      <ChatApp
+        {...props}
+        onEditAnswer={onEditAnswer}
+        messages={[{
+          id: "boolean-answer",
+          role: "user",
+          content: "Yes",
+          editable: true,
+          answerType: "bool",
+        }]}
+      />,
+    );
+
+    act(() => button("✎")?.click());
+    const textarea = container?.querySelector<HTMLTextAreaElement>('[aria-label="Edit answer text"]');
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")
+        ?.set?.call(textarea, "No");
+      textarea?.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => button("Save")?.click());
+
+    expect(onEditAnswer).toHaveBeenCalledWith("boolean-answer", false);
   });
 });
 

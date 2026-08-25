@@ -1,5 +1,7 @@
 import {
   DEFAULT_ROBOT_AUTO_EXECUTIONS_PER_ACTIVITY,
+  DEFAULT_ACTIVITY_REPETITIONS,
+  type ChatInput,
   type ChatSettings,
 } from "@dcr-js/chat";
 
@@ -93,6 +95,7 @@ export class ChatWorkspaceController {
     graphXml: string,
     dcrRole: string,
     robotAutoLimit: number,
+    activityRepeatLimit: number,
     options: ChatRequestOptions = {},
   ): Promise<ChatResponse> {
     return this.api.createResponse(
@@ -102,6 +105,7 @@ export class ChatWorkspaceController {
         graph_xml: graphXml,
         dcr_role: dcrRole,
         robot_auto_limit: robotAutoLimit,
+        activity_repeat_limit: activityRepeatLimit,
         ...dcrMetadata(options),
       }, options),
       options.signal,
@@ -128,6 +132,7 @@ export class ChatWorkspaceController {
     source: string,
     dcrRole: string,
     robotAutoLimit: number,
+    activityRepeatLimit: number,
     options: ChatRequestOptions = {},
   ): Promise<ChatResponse> {
     return this.api.createResponse(
@@ -136,6 +141,7 @@ export class ChatWorkspaceController {
         session_id: sessionId,
         dcr_role: dcrRole,
         robot_auto_limit: robotAutoLimit,
+        activity_repeat_limit: activityRepeatLimit,
         ...dcrMetadata(options),
       }, options),
       options.signal,
@@ -159,9 +165,10 @@ export class ChatWorkspaceController {
 
   continueDcr(
     sessionId: string,
-    text: string,
+    text: ChatInput,
     dcrRole: string,
     robotAutoLimit: number,
+    activityRepeatLimit: number,
     actId?: string,
     options: ChatRequestOptions = {},
   ): Promise<ChatResponse> {
@@ -172,6 +179,7 @@ export class ChatWorkspaceController {
         act_id: actId,
         dcr_role: dcrRole,
         robot_auto_limit: robotAutoLimit,
+        activity_repeat_limit: activityRepeatLimit,
         ...dcrMetadata(options),
       }, options),
       options.signal,
@@ -247,6 +255,8 @@ function withSessionDefaults(record: ChatSessionRecord): ChatSessionRecord {
     robotAutoExecutionsPerActivity:
       record.robotAutoExecutionsPerActivity
       ?? DEFAULT_ROBOT_AUTO_EXECUTIONS_PER_ACTIVITY,
+    activityRepetitions:
+      record.activityRepetitions ?? DEFAULT_ACTIVITY_REPETITIONS,
   };
 }
 

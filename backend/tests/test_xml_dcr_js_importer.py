@@ -503,9 +503,13 @@ def test_round_trips_activity_definitions_and_tagged_computations():
             2.5,
         ],
         takesInput=True,
+        trusted=False,
     )
     subprocess = DcrSubprocess(
-        "process", {activity}, computation=[("automated", "data"), "+", 1]
+        "process",
+        {activity},
+        computation=[("automated", "data"), "+", 1],
+        trusted=False,
     )
     subprocess.priority = -2.5
     graph = DcrGraph("definitions", elements={activity, subprocess})
@@ -517,9 +521,12 @@ def test_round_trips_activity_definitions_and_tagged_computations():
 
     assert imported_activity.computation == activity.computation
     assert imported_activity.takesInput is True
+    assert imported_activity.trusted is False
     assert imported_activity.eventData is None
     assert imported_subprocess.computation == [("Event_automated", "data"), "+", 1]
     assert imported_subprocess.priority == -2.5
+    assert imported_subprocess.trusted is False
+    assert b'trusted="false"' in xml
 
 
 @pytest.mark.parametrize(
@@ -546,7 +553,9 @@ def test_round_trips_registered_tool_calls_without_invoking_them(
     imported = xml_dcr_js.import_from_string(xml)
 
     assert f'toolCall="{expected.value}"'.encode() in xml
+    assert b'trusted="true"' in xml
     assert imported.getActivity("Event_tool").tool_call is expected
+    assert imported.getActivity("Event_tool").trusted is True
 
 
 def test_rejects_unknown_and_unregistered_tool_calls():

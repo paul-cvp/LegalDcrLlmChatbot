@@ -5,13 +5,14 @@ from fastapi import HTTPException
 
 from api import chat_api
 from approaches.dcr_chat import (
+    ActivityRepeatPolicy,
     ROBOT_AUTO_EXECUTIONS_ENV,
     DcrChat,
     RobotExecutionPolicy,
 )
 from object.domain import DcrChatRequest
 from object.errors import ValidationError
-from pm4py.objects.dcr.ocdcr.obj import DcrActivity, DcrEventData, DcrGraph
+from pm4py.objects.dcr.ocdcr.obj import DcrActivity, DcrEventData, DcrExecution, DcrGraph
 
 
 class FakeInputInterpreter:
@@ -55,6 +56,61 @@ def chat(*activities, limit=1, decision=True):
         output_interpreter=FakeOutputInterpreter(),
         robot_auto_limit=limit,
     )
+
+
+@pytest.mark.parametrize(("limit", "executions", "allowed"), [
+    (0, 0, True),
+    (0, 1, False),
+    (2, 2, True),
+    (2, 3, False),
+    (-1, 10, True),
+])
+def test_activity_repeat_policy_counts_repetitions(limit, executions, allowed):
+    activity = DcrActivity("answer", role="Citizen")
+    trace = [DcrExecution(activity.ID) for _ in range(executions)]
+
+    assert ActivityRepeatPolicy(limit).allows(activity, trace) is allowed
+
+
+def test_activity_repeat_policy_rejects_values_below_minus_one():
+    with pytest.raises(ValidationError, match="must be -1 or greater"):
+        ActivityRepeatPolicy(-2)
+
+
+def test_capped_active_role_notifies_user_that_other_roles_continue():
+    activity = DcrActivity("answer", role="Citizen")
+    other = DcrActivity("review", role="Case worker", pending=True)
+    instance = chat(activity, other)
+    instance.trace.append(DcrExecution(activity.ID))
+
+    response = asyncio.run(instance.run(DcrChatRequest(
+        text="try again",
+        chat_type=1,
+        act_id=activity.ID,
+        dcr_role="Citizen",
+        activity_repeat_limit=0,
+    )))
+
+    assert response.text == (
+        "You have completed all currently enabled activities allowed by the repetition setting. "
+        "Other roles will continue working on the case."
+    )
+    assert len(instance.trace) == 1
+
+
+def test_capped_active_role_reports_an_accepting_process_as_complete():
+    activity = DcrActivity("answer", role="Citizen")
+    instance = chat(activity)
+    instance.trace.append(DcrExecution(activity.ID))
+
+    response = asyncio.run(instance.run(DcrChatRequest(
+        text="",
+        chat_type=1,
+        dcr_role="Citizen",
+        activity_repeat_limit=0,
+    )))
+
+    assert response.text == "The process is complete!"
 
 
 @pytest.mark.parametrize("value", [-1, 0, 1, 3])

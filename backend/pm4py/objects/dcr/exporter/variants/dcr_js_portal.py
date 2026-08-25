@@ -133,6 +133,7 @@ class _EditorXmlExporter:
             xml.set("executed", self._boolean(element.executed is not None))
             xml.set("pending", self._boolean(element.pending))
             xml.set("takesInput", self._boolean(element.takesInput))
+            xml.set("trusted", self._boolean(element.trusted))
             if element.computation is not None:
                 xml.set(
                     "computation", self._computation(element.computation)

@@ -64,10 +64,12 @@ export default function ChatState({
       notice={chat.notice}
       inputDisabled={chat.inputDisabled}
       inputDisabledReason={chat.inputDisabledReason}
+      expectedAnswerType={chat.expectedAnswerType}
       graphPanel={graphPanel}
       citationPanel={<ChatCitationPreview citation={chat.selectedCitation} />}
       hasCachedCitizenInformation={Boolean(citizenInformation.trim())}
       onSend={chat.send}
+      onEditAnswer={chat.editAnswer}
       onClear={chat.clear}
       onSettingsChange={chat.updateSettings}
       onSelectSession={chat.selectSession}

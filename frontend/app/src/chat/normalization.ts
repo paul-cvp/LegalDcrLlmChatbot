@@ -14,6 +14,8 @@ export interface DcrActivityMetadata {
   included: boolean;
   pending: boolean;
   executed: boolean;
+  trusted: boolean;
+  dataType?: "int" | "bool";
 }
 
 export interface NormalizedEvidence {
@@ -73,6 +75,9 @@ export function parseDcrActivities(graphXml: string): DcrActivityMetadata[] {
     .flatMap((element) => {
       const id = element.getAttribute("id");
       if (!id) return [];
+      const eventData = Array.from(element.children)
+        .find((child) => child.localName === "eventData");
+      const dataType = eventData?.getAttribute("type")?.toLowerCase();
       return [{
         id,
         label: element.getAttribute("label") ?? element.getAttribute("description") ?? id,
@@ -81,8 +86,19 @@ export function parseDcrActivities(graphXml: string): DcrActivityMetadata[] {
         included: xmlBoolean(element.getAttribute("included"), true),
         pending: xmlBoolean(element.getAttribute("pending"), false),
         executed: xmlBoolean(element.getAttribute("executed"), false),
+        trusted: xmlBoolean(element.getAttribute("trusted"), true),
+        dataType: dataType === "int" || dataType === "bool" ? dataType : undefined,
       }];
     });
+}
+
+export function expectedDcrAnswerType(
+  graphXml: string | undefined,
+  activityId: string | undefined,
+): "int" | "bool" | undefined {
+  if (!graphXml || !activityId) return undefined;
+  const activity = parseDcrActivities(graphXml).find((item) => item.id === activityId);
+  return canonicalizeDcrRole(activity?.role) === "Robot" ? "bool" : activity?.dataType;
 }
 
 export function isRobotActivity(graphXml: string | undefined, activityId: string | undefined): boolean {
@@ -233,13 +249,26 @@ export function mergeChatHistory(
   candidateDescriptions: Readonly<Record<string, string>> = {},
   enrichment: Readonly<Record<string, ChatMessageEnrichment>> = {},
 ): StoredChatMessage[] {
+  const archived = storedMessages.filter((message) => message.archived);
+  const currentMessages = storedMessages.filter((message) => !message.archived);
+  const legacyPositional = currentMessages.every(
+    (message) => message.historyIndex === undefined,
+  );
+  const matched = new Set<StoredChatMessage>();
   const messages = history.map((entry, historyIndex) => {
-    const stored = storedMessages.find((message) => message.historyIndex === historyIndex)
-      ?? storedMessages[historyIndex];
-    const id = stored?.id ?? `history-${historyIndex}`;
-    const localEnrichment = enrichment[id];
     const role = historyRole(entry);
     const hiddenCandidate = role === "user" ? candidateDescriptions[entry.item] : undefined;
+    const content = hiddenCandidate ?? entry.item;
+    const stored = currentMessages.find((message) => message.historyIndex === historyIndex)
+      ?? currentMessages.find((message) =>
+        message.historyIndex === undefined
+        && !matched.has(message)
+        && message.role === role
+        && (message.content === content || submittedValueMatches(message, entry.item)))
+      ?? (legacyPositional ? currentMessages[historyIndex] : undefined);
+    if (stored) matched.add(stored);
+    const id = stored?.id ?? `history-${historyIndex}`;
+    const localEnrichment = enrichment[id];
     const locallySanitized = stored?.contentOverride ? stored.content : undefined;
 
     return {
@@ -253,7 +282,7 @@ export function mergeChatHistory(
     };
   });
 
-  return messages.reduce<StoredChatMessage[]>((visible, message, historyIndex) => {
+  const visible = messages.reduce<StoredChatMessage[]>((visible, message, historyIndex) => {
     if (history[historyIndex]?.metadata?.interpreted !== true) {
       visible.push(message);
       return visible;
@@ -268,6 +297,15 @@ export function mergeChatHistory(
     };
     return visible;
   }, []);
+  return [...archived, ...visible];
+}
+
+function submittedValueMatches(message: StoredChatMessage, historyItem: string): boolean {
+  if (message.submittedValue === undefined) return false;
+  const value = typeof message.submittedValue === "boolean"
+    ? message.submittedValue ? "True" : "False"
+    : String(message.submittedValue);
+  return historyItem === value || historyItem.startsWith(`${value} interpreted as Robot permission `);
 }
 
 function interpretedValue(content: string): string {

@@ -4,8 +4,11 @@ export type ChatMode = "dcr-controller" | "rag" | "dcr";
 export type ChatMessageRole = "user" | "assistant" | "robot" | "system";
 export type DcrRole = "Citizen" | "Caseworker";
 export type SearchIndex = "All" | "Relevant laws" | "Similar cases";
+export type ChatInput = string | number | boolean;
+export type ExpectedAnswerType = "int" | "bool";
 
 export const DEFAULT_ROBOT_AUTO_EXECUTIONS_PER_ACTIVITY = 1;
+export const DEFAULT_ACTIVITY_REPETITIONS = 0;
 
 export interface GraphCandidate {
   id: string;
@@ -44,6 +47,8 @@ export interface ChatMessage {
   citations?: readonly ChatCitation[];
   followups?: readonly string[];
   candidates?: readonly GraphCandidate[];
+  editable?: boolean;
+  answerType?: ExpectedAnswerType;
 }
 
 export interface ChatSessionSummary {
@@ -58,6 +63,7 @@ export interface ChatSessionSummary {
 export interface ChatSettings {
   dcrRole: DcrRole;
   robotAutoExecutionsPerActivity: number;
+  activityRepetitions: number;
   useCitizenInformation: boolean;
   searchIndex: SearchIndex;
   suggestFollowupQuestions: boolean;
@@ -83,7 +89,9 @@ export interface ChatAppProps {
   graphPanel?: ReactNode;
   citationPanel?: ReactNode;
   hasCachedCitizenInformation?: boolean;
-  onSend: (text: string) => ChatCallbackResult;
+  expectedAnswerType?: ExpectedAnswerType;
+  onSend: (input: ChatInput) => ChatCallbackResult;
+  onEditAnswer?: (messageId: string, input: ChatInput) => ChatCallbackResult;
   onClear: () => ChatCallbackResult;
   onSettingsChange: (settings: ChatSettings) => ChatCallbackResult;
   onSelectSession: (sessionId: string) => ChatCallbackResult;

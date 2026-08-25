@@ -13,9 +13,11 @@ import remarkGfm from "remark-gfm";
 import type {
   ChatAppProps,
   ChatCitation,
+  ChatInput,
   ChatMessage,
   ChatSettings,
   DcrRole,
+  ExpectedAnswerType,
   GraphCandidate,
   SearchIndex,
 } from "./types";
@@ -55,11 +57,13 @@ export function ChatApp({
   notice,
   inputDisabled = false,
   inputDisabledReason,
+  expectedAnswerType,
   placeholder = "Write a message…",
   graphPanel,
   citationPanel,
   hasCachedCitizenInformation = false,
   onSend,
+  onEditAnswer,
   onClear,
   onSettingsChange,
   onSelectSession,
@@ -76,6 +80,9 @@ export function ChatApp({
   const [analysisTab, setAnalysisTab] = useState<AnalysisTab>();
   const [selectedMessageId, setSelectedMessageId] = useState<string>();
   const [selectedCitationId, setSelectedCitationId] = useState<string>();
+  const [editingMessageId, setEditingMessageId] = useState<string>();
+  const [editingDraft, setEditingDraft] = useState("");
+  const [editError, setEditError] = useState<string>();
   const streamEnd = useRef<HTMLDivElement>(null);
 
   const selectedMessage = useMemo(
@@ -149,6 +156,27 @@ export function ChatApp({
     }
   };
 
+  const startEditing = (message: ChatMessage) => {
+    setEditingMessageId(message.id);
+    setEditingDraft(message.content);
+    setEditError(undefined);
+  };
+
+  const submitEdit = async (event: FormEvent, message: ChatMessage) => {
+    event.preventDefault();
+    const text = editingDraft.trim();
+    if (!text || text === message.content || !onEditAnswer) return;
+    const input = typedAnswer(text, message.answerType);
+    if (input === undefined) {
+      setEditError(message.answerType === "int" ? "Enter a whole number." : "Enter Yes or No.");
+      return;
+    }
+    await onEditAnswer(message.id, input);
+    setEditingMessageId(undefined);
+    setEditingDraft("");
+    setEditError(undefined);
+  };
+
   return (
     <section className={`dcrChat${hasAnalysis ? " dcrChat--analysis" : ""}`}>
       <header className="dcrChat__header">
@@ -203,18 +231,62 @@ export function ChatApp({
                 <div className="dcrChat__messageHeading">
                   <strong>{ROLE_LABELS[message.role]}</strong>
                   {message.dcrRole && <span>{message.dcrRole}</span>}
+                  {message.role === "user" && message.editable && onEditAnswer && (
+                    <button
+                      className="dcrChat__editAnswer"
+                      type="button"
+                      aria-label="Edit answer"
+                      title="Edit answer"
+                      disabled={loading}
+                      onClick={() => startEditing(message)}
+                    >
+                      ✎
+                    </button>
+                  )}
                   {message.createdAt && <time dateTime={message.createdAt}>{formatDate(message.createdAt)}</time>}
                 </div>
-                <div className="dcrChat__markdown">
-                  <CitationMarkdown
-                    message={message}
-                    candidateSelectionDisabled={loading}
-                    onCandidateSelect={(candidate) => {
-                      void onSelectCandidate(candidate, message);
-                    }}
-                    onSelect={selectCitation}
-                  />
-                </div>
+                {editingMessageId === message.id ? (
+                  <form className="dcrChat__answerEditor" onSubmit={(event) => void submitEdit(event, message)}>
+                    <textarea
+                      aria-label="Edit answer text"
+                      autoFocus
+                      rows={2}
+                      value={editingDraft}
+                      disabled={loading}
+                      onChange={(event) => setEditingDraft(event.target.value)}
+                    />
+                    {editError && <small className="dcrChat__fieldError">{editError}</small>}
+                    <div>
+                      <button
+                        type="button"
+                        disabled={loading}
+                        onClick={() => {
+                          setEditingMessageId(undefined);
+                          setEditError(undefined);
+                        }}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={loading || !editingDraft.trim() || editingDraft.trim() === message.content}
+                      >
+                        Save
+                      </button>
+                    </div>
+                  </form>
+                ) : (
+                  <div className="dcrChat__markdown">
+                    <CitationMarkdown
+                      message={message}
+                      candidateSelectionDisabled={loading}
+                      onCandidateSelect={(candidate) => {
+                        void onSelectCandidate(candidate, message);
+                      }}
+                      onSelect={selectCitation}
+                    />
+                  </div>
+                )}
                 {message.role === "user" && message.interpretedValue && (
                   <small className="dcrChat__interpretation">
                     Interpreted as: {message.interpretedValue}
@@ -285,6 +357,13 @@ export function ChatApp({
             )}
             {inputDisabled && inputDisabledReason && (
               <div className="dcrChat__notice" role="status">{inputDisabledReason}</div>
+            )}
+            {expectedAnswerType && (
+              <ExpectedAnswerWidget
+                type={expectedAnswerType}
+                disabled={composerDisabled}
+                onSubmit={onSend}
+              />
             )}
             <form className="dcrChat__composer" onSubmit={submit}>
               <textarea
@@ -406,6 +485,7 @@ export function ChatApp({
                 hasCachedCitizenInformation={hasCachedCitizenInformation}
                 onDcrRoleChange={(value) => void updateSetting("dcrRole", value)}
                 onRobotAutoExecutionsChange={(value) => void updateSetting("robotAutoExecutionsPerActivity", value)}
+                onActivityRepetitionsChange={(value) => void updateSetting("activityRepetitions", value)}
                 onCitizenInformationChange={(value) => void updateSetting("useCitizenInformation", value)}
                 onSearchIndexChange={(value) => void updateSetting("searchIndex", value)}
                 onFollowupsChange={(value) => void updateSetting("suggestFollowupQuestions", value)}
@@ -416,6 +496,80 @@ export function ChatApp({
       )}
     </section>
   );
+}
+
+interface ExpectedAnswerWidgetProps {
+  type: ExpectedAnswerType;
+  disabled: boolean;
+  onSubmit: (input: ChatInput) => void | Promise<void>;
+}
+
+function ExpectedAnswerWidget({ type, disabled, onSubmit }: ExpectedAnswerWidgetProps) {
+  const [integer, setInteger] = useState("");
+  const [error, setError] = useState<string>();
+
+  useEffect(() => {
+    setInteger("");
+    setError(undefined);
+  }, [type]);
+
+  if (type === "bool") {
+    return (
+      <div className="dcrChat__answerWidget" aria-label="Expected Boolean answer">
+        <span>Choose an answer</span>
+        <div>
+          <button type="button" disabled={disabled} onClick={() => void onSubmit(true)}>Yes</button>
+          <button type="button" disabled={disabled} onClick={() => void onSubmit(false)}>No</button>
+        </div>
+      </div>
+    );
+  }
+
+  const submitInteger = (event: FormEvent) => {
+    event.preventDefault();
+    const value = Number(integer);
+    if (!/^-?\d+$/.test(integer.trim()) || !Number.isSafeInteger(value)) {
+      setError("Enter a whole number.");
+      return;
+    }
+    setInteger("");
+    setError(undefined);
+    void onSubmit(value);
+  };
+
+  return (
+    <form className="dcrChat__answerWidget" aria-label="Expected Integer answer" onSubmit={submitInteger}>
+      <label>
+        <span>Enter a whole number</span>
+        <input
+          type="number"
+          step="1"
+          inputMode="numeric"
+          value={integer}
+          disabled={disabled}
+          onChange={(event) => {
+            setInteger(event.target.value);
+            setError(undefined);
+          }}
+        />
+      </label>
+      <button type="submit" disabled={disabled || !integer.trim()}>Submit</button>
+      {error && <small className="dcrChat__fieldError">{error}</small>}
+    </form>
+  );
+}
+
+function typedAnswer(value: string, type?: ExpectedAnswerType): ChatInput | undefined {
+  if (type === "int") {
+    const number = Number(value);
+    return /^-?\d+$/.test(value) && Number.isSafeInteger(number) ? number : undefined;
+  }
+  if (type === "bool") {
+    if (/^(yes|true)$/i.test(value)) return true;
+    if (/^(no|false)$/i.test(value)) return false;
+    return undefined;
+  }
+  return value;
 }
 
 interface CitationMarkdownProps {
@@ -630,6 +784,7 @@ interface SettingsProps {
   hasCachedCitizenInformation: boolean;
   onDcrRoleChange: (value: DcrRole) => void;
   onRobotAutoExecutionsChange: (value: number) => void;
+  onActivityRepetitionsChange: (value: number) => void;
   onCitizenInformationChange: (value: boolean) => void;
   onSearchIndexChange: (value: SearchIndex) => void;
   onFollowupsChange: (value: boolean) => void;
@@ -642,6 +797,7 @@ function Settings({
   hasCachedCitizenInformation,
   onDcrRoleChange,
   onRobotAutoExecutionsChange,
+  onActivityRepetitionsChange,
   onCitizenInformationChange,
   onSearchIndexChange,
   onFollowupsChange,
@@ -680,6 +836,28 @@ function Settings({
           {isRag
             ? "Robot execution settings apply only to DCR chats."
             : "Use -1 for unlimited automatic executions, 0 to always require Caseworker confirmation, or a positive limit for each Robot activity."}
+        </small>
+      </label>
+
+      <label>
+        <span>Repeat executed activities</span>
+        <input
+          type="number"
+          min={-1}
+          step={1}
+          value={value.activityRepetitions}
+          disabled={isRag || busy}
+          onChange={(event) => {
+            const limit = event.currentTarget.valueAsNumber;
+            if (Number.isInteger(limit) && limit >= -1) {
+              onActivityRepetitionsChange(limit);
+            }
+          }}
+        />
+        <small>
+          {isRag
+            ? "Activity repetition settings apply only to DCR chats."
+            : "Use -1 for unlimited repetitions, 0 for no repetitions, or a positive number for the allowed repetitions."}
         </small>
       </label>
 

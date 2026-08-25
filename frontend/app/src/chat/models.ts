@@ -1,3 +1,5 @@
+import type { ChatInput, ExpectedAnswerType } from "@dcr-js/chat";
+
 export type ChatSessionMode = "dcr-controller" | "rag" | "dcr";
 export type DcrUserRole = "Citizen" | "Caseworker";
 
@@ -26,6 +28,12 @@ export interface StoredGraphCandidate {
   source: string;
 }
 
+export interface DcrAnswerCheckpoint {
+  graphXml: string;
+  pendingActivityId: string;
+  selectedRole: DcrUserRole;
+}
+
 /** Serializable counterpart of the presentation package's ChatMessage. */
 export interface StoredChatMessage {
   id: string;
@@ -41,6 +49,13 @@ export interface StoredChatMessage {
   citations?: readonly StoredChatCitation[];
   followups?: readonly string[];
   candidates?: readonly StoredGraphCandidate[];
+  editable?: boolean;
+  answerType?: ExpectedAnswerType;
+  submittedValue?: ChatInput;
+  /** State immediately before this DCR answer was submitted. */
+  checkpoint?: DcrAnswerCheckpoint;
+  /** Preserved display history from a replaced backend session. */
+  archived?: boolean;
 }
 
 export interface ChatMessageEnrichment {
@@ -57,6 +72,7 @@ export interface ChatSessionRecord {
   updatedAt: number;
   selectedRole: DcrUserRole;
   robotAutoExecutionsPerActivity: number;
+  activityRepetitions: number;
   graphName?: string;
   graphXml?: string;
   pendingActivityId?: string;

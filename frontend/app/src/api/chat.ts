@@ -20,6 +20,7 @@ export interface DcrChatStartRequest {
   graph_xml: string;
   dcr_role: string;
   robot_auto_limit: number;
+  activity_repeat_limit: number;
   citizen_information?: string;
   metadata?: DcrChatMetadata;
 }
@@ -48,6 +49,7 @@ export interface ChatContinuationRequest {
   act_id?: string;
   dcr_role?: string;
   robot_auto_limit?: number;
+  activity_repeat_limit?: number;
   citizen_information?: string;
   metadata?: RagChatMetadata | DcrChatMetadata;
 }

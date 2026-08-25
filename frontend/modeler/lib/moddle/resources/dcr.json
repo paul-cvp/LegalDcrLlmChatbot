@@ -60,6 +60,11 @@
           "type": "String"
         },
         {
+          "name": "trusted",
+          "isAttr": true,
+          "type": "Boolean"
+        },
+        {
           "name": "included",
           "isAttr": true,
           "type": "Boolean"
@@ -173,6 +178,11 @@
           "name": "toolCall",
           "isAttr": true,
           "type": "String"
+        },
+        {
+          "name": "trusted",
+          "isAttr": true,
+          "type": "Boolean"
         },
         {
           "name": "eventData",

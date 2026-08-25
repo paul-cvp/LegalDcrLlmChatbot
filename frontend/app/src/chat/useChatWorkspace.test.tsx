@@ -128,6 +128,7 @@ describe("useChatWorkspace", () => {
     await act(async () => workspace.current.selectCandidate(candidate!));
     expect(requests[1]).toMatchObject({
       robot_auto_limit: 1,
+      activity_repeat_limit: 0,
       citizen_information: "Cached citizen profile",
       metadata: { use_citizen_data: true },
     });
@@ -149,6 +150,7 @@ describe("useChatWorkspace", () => {
       act_id: "robot",
       dcr_role: "Case worker",
       robot_auto_limit: 1,
+      activity_repeat_limit: 0,
       citizen_information: "Cached citizen profile",
       metadata: { use_citizen_data: true },
     });
@@ -187,9 +189,132 @@ describe("useChatWorkspace", () => {
       graph_xml: GRAPH_XML,
       dcr_role: "Citizen",
       robot_auto_limit: 1,
+      activity_repeat_limit: 0,
     });
     expect(workspace.current.messages).toHaveLength(1);
     expect(workspace.current.messages[0]?.role).toBe("assistant");
+  });
+
+  it("sends widget answers as native values without an interpreted message", async () => {
+    const typedGraph = `<dcr:definitions xmlns:dcr="http://tk/schema/dcr"><dcr:dcrGraph id="typed"><dcr:event id="eligible" role="Citizen" included="true"><dcr:eventData name="eligible" type="Bool" /></dcr:event></dcr:dcrGraph></dcr:definitions>`;
+    let history = historyEntries([["Are you eligible?", "assistant", "Citizen"]]);
+    const requests: Record<string, unknown>[] = [];
+    const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).endsWith("/history")) return Response.json(history);
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      requests.push(body);
+      if (body.session_id) {
+        history = historyEntries([
+          ["Are you eligible?", "assistant", "Citizen"],
+          ["True", "user", "Citizen"],
+          ["The process is complete!", "assistant", "Citizen"],
+        ]);
+        return Response.json({
+          text: "The process is complete!",
+          session_id: "typed-session",
+          graph_xml: typedGraph,
+          act_id: null,
+          dcr_role: null,
+        });
+      }
+      return Response.json({
+        text: "Are you eligible?",
+        session_id: "typed-session",
+        graph_xml: typedGraph,
+        act_id: "eligible",
+        dcr_role: "Citizen",
+      });
+    });
+    const workspace = await renderWorkspace(
+      { mode: "dcr", graphName: "Typed", graphXml: typedGraph },
+      createController(fetcher),
+      true,
+    );
+
+    expect(workspace.current.expectedAnswerType).toBe("bool");
+    await act(async () => workspace.current.send(true));
+
+    expect(requests.at(-1)?.text).toBe(true);
+    expect(workspace.current.messages[1]).toMatchObject({
+      role: "user",
+      content: "Yes",
+      editable: true,
+    });
+    expect(workspace.current.messages[1]).not.toHaveProperty("interpretedValue");
+  });
+
+  it("restores the pre-answer graph and replaces the session when editing", async () => {
+    const initialGraph = `<dcr:definitions xmlns:dcr="http://tk/schema/dcr"><dcr:dcrGraph id="edit"><dcr:event id="answer" role="Citizen" included="true" /></dcr:dcrGraph></dcr:definitions>`;
+    const oldGraph = initialGraph.replace("</dcr:dcrGraph>", '<dcr:event id="next" role="Citizen" included="true" /></dcr:dcrGraph>');
+    const revisedGraph = oldGraph.replace('id="edit"', 'id="revised"');
+    const requests: Record<string, unknown>[] = [];
+    const histories: Record<string, ChatHistoryEntry[]> = {
+      "old-session": historyEntries([["Original question", "assistant", "Citizen"]]),
+      "new-session": historyEntries([["Original question", "assistant", "Citizen"]]),
+    };
+    let starts = 0;
+    const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input);
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      if (path.endsWith("/history")) {
+        return Response.json(histories[body.session_id as string]);
+      }
+      if (path.endsWith("/session")) return new Response(null, { status: 204 });
+
+      requests.push(body);
+      if (body.chat_type === 1) {
+        starts += 1;
+        return Response.json({
+          text: "Original question",
+          session_id: starts === 1 ? "old-session" : "new-session",
+          graph_xml: initialGraph,
+          act_id: "answer",
+          dcr_role: "Citizen",
+        });
+      }
+      const sessionId = body.session_id as string;
+      const revised = sessionId === "new-session";
+      histories[sessionId] = historyEntries([
+        ["Original question", "assistant", "Citizen"],
+        [body.text as string, "user", "Citizen"],
+        [revised ? "Revised next question" : "Old next question", "assistant", "Citizen"],
+      ]);
+      return Response.json({
+        text: revised ? "Revised next question" : "Old next question",
+        session_id: sessionId,
+        graph_xml: revised ? revisedGraph : oldGraph,
+        act_id: "next",
+        dcr_role: "Citizen",
+      });
+    });
+    const workspace = await renderWorkspace(
+      { mode: "dcr", graphName: "Editable", graphXml: initialGraph },
+      createController(fetcher),
+      true,
+    );
+
+    await act(async () => workspace.current.send("Old answer"));
+    const answer = workspace.current.messages.find(({ content }) => content === "Old answer");
+    expect(answer?.editable).toBe(true);
+
+    await act(async () => workspace.current.editAnswer(answer!.id, "New answer"));
+
+    expect(requests.at(-2)).toMatchObject({
+      chat_type: 1,
+      graph_xml: initialGraph,
+    });
+    expect(requests.at(-1)).toMatchObject({
+      session_id: "new-session",
+      act_id: "answer",
+      text: "New answer",
+    });
+    expect(workspace.current.activeSessionId).toBe("new-session");
+    expect(workspace.current.graphXml).toBe(revisedGraph);
+    expect(workspace.current.messages.map(({ content }) => content)).toEqual([
+      "Original question",
+      "New answer",
+      "Revised next question",
+    ]);
   });
 
   it("changes a non-Robot DCR role without executing the old activity", async () => {
@@ -243,6 +368,7 @@ describe("useChatWorkspace", () => {
       session_id: "role-session",
       dcr_role: "Case worker",
       robot_auto_limit: 1,
+      activity_repeat_limit: 0,
     });
     expect(workspace.current.messages.at(-1)?.content).toBe("Caseworker question");
   });
@@ -309,11 +435,13 @@ describe("useChatWorkspace", () => {
     expect(workspace.current.graphXml).toBe(updatedGraph);
   });
 
-  it("persists and restores the Robot automatic-execution limit", async () => {
+  it("persists and restores DCR execution limits", async () => {
     let history = historyEntries([["Find a graph", "user", null], ["Choose", "assistant", null]]);
+    const requests: Record<string, unknown>[] = [];
     const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       if (String(input).endsWith("/history")) return Response.json(history);
       const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      requests.push(body);
       if (body.chat_type === 2) {
         return Response.json({
           text: "Choose",
@@ -345,6 +473,7 @@ describe("useChatWorkspace", () => {
     await act(async () => workspace.current.updateSettings({
       ...workspace.current.settings,
       robotAutoExecutionsPerActivity: -1,
+      activityRepetitions: 2,
     }));
     await act(async () => workspace.current.send("Find a graph"));
     await act(async () => workspace.current.selectCandidate(
@@ -353,8 +482,11 @@ describe("useChatWorkspace", () => {
 
     expect((await controller.getSession("limit-session"))?.robotAutoExecutionsPerActivity)
       .toBe(-1);
+    expect(requests.at(-1)?.activity_repeat_limit).toBe(2);
+    expect((await controller.getSession("limit-session"))?.activityRepetitions).toBe(2);
     await act(async () => workspace.current.selectSession("limit-session"));
     expect(workspace.current.settings.robotAutoExecutionsPerActivity).toBe(-1);
+    expect(workspace.current.settings.activityRepetitions).toBe(2);
   });
 
   it("sends RAG metadata every turn and enriches the answer", async () => {
@@ -467,6 +599,7 @@ describe("useChatWorkspace", () => {
       updatedAt: 1,
       selectedRole: "Citizen",
       robotAutoExecutionsPerActivity: 1,
+      activityRepetitions: 0,
       graphXml,
       messages: [],
       enrichment: {},
@@ -500,6 +633,7 @@ describe("useChatWorkspace", () => {
         updatedAt: 1,
         selectedRole: "Citizen",
         robotAutoExecutionsPerActivity: 1,
+        activityRepetitions: 0,
         messages: [],
         enrichment: {},
         candidates: [],
@@ -528,6 +662,7 @@ describe("useChatWorkspace", () => {
       updatedAt: 1,
       selectedRole: "Citizen",
       robotAutoExecutionsPerActivity: 1,
+      activityRepetitions: 0,
       messages: [],
       enrichment: {},
       candidates: [],

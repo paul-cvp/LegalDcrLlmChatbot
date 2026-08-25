@@ -559,7 +559,8 @@ const update = (graph, modeling, elementReg, variableStore = {}, currentTime = n
       modeling.updateProperties(element, { executed: graph.marking.executed.has(event) });
       modeling.updateProperties(element, { included: graph.marking.included.has(event) });
       modeling.updateProperties(element, { pending: graph.marking.pending.has(event) });
-      if (event.includes('Event')) {
+      // Event IDs are arbitrary, so use the modeled element type.
+      if (element?.type === 'dcr:Event') {
         modeling.updateProperties(element, { enabled: isEnabledS(event, graph, group, variableStore, currentTime).enabled });
       }
 

@@ -7,11 +7,14 @@ import {
 } from "react";
 import {
   DEFAULT_ROBOT_AUTO_EXECUTIONS_PER_ACTIVITY,
+  DEFAULT_ACTIVITY_REPETITIONS,
   type ChatCitation,
+  type ChatInput,
   type ChatMessage,
   type ChatSessionSummary,
   type ChatSettings,
   type GraphCandidate,
+  type ExpectedAnswerType,
 } from "@dcr-js/chat";
 
 import type { ChatLaunchConfig } from "../App";
@@ -36,6 +39,7 @@ import {
   canonicalizeDcrRole,
   extractAutomaticRobotExecutions,
   extractDcrToolEvidence,
+  expectedDcrAnswerType,
   type DcrToolEvidence,
   isRobotActivity,
   mergeChatHistory,
@@ -48,6 +52,7 @@ type ActiveSession = Omit<ChatSessionRecord, "id"> & { id?: string };
 export const DEFAULT_CHAT_SETTINGS: ChatSettings = {
   dcrRole: "Citizen",
   robotAutoExecutionsPerActivity: DEFAULT_ROBOT_AUTO_EXECUTIONS_PER_ACTIVITY,
+  activityRepetitions: DEFAULT_ACTIVITY_REPETITIONS,
   useCitizenInformation: false,
   searchIndex: "All",
   suggestFollowupQuestions: true,
@@ -69,7 +74,9 @@ export interface ChatWorkspace {
   notice: string | null;
   inputDisabled: boolean;
   inputDisabledReason?: string;
-  send: (text: string) => Promise<void>;
+  expectedAnswerType?: ExpectedAnswerType;
+  send: (input: ChatInput) => Promise<void>;
+  editAnswer: (messageId: string, input: ChatInput) => Promise<void>;
   clear: () => Promise<void>;
   updateSettings: (settings: ChatSettings) => Promise<void>;
   selectSession: (id: string) => Promise<void>;
@@ -297,6 +304,7 @@ export function useChatWorkspace(
         draft.graphXml!,
         graphRole,
         draft.robotAutoExecutionsPerActivity,
+        draft.activityRepetitions,
         requestOptions(settings, citizenInformation, signal),
       );
       await finalizeResponse(response, draft, [], signal);
@@ -318,9 +326,9 @@ export function useChatWorkspace(
     };
   }, [bootstrapDirect, launch.mode, refreshSessionList]);
 
-  const send = useCallback(async (text: string) => {
-    const trimmed = text.trim();
-    if (!trimmed) return;
+  const send = useCallback(async (input: ChatInput) => {
+    const value = typeof input === "string" ? input.trim() : input;
+    if (value === "") return;
     const disabledReason = inputLockReason(activeRef.current);
     if (disabledReason) {
       setError(disabledReason);
@@ -331,16 +339,29 @@ export function useChatWorkspace(
       const current = discardUncommitted(activeRef.current);
       const runtime = Boolean(current.graphXml && current.id);
       const previousHistory = historyRef.current;
+      const answerType = runtime
+        ? expectedDcrAnswerType(current.graphXml, current.pendingActivityId)
+        : undefined;
+      const content = typeof value === "boolean" ? value ? "Yes" : "No" : String(value);
       const userMessage: StoredChatMessage = {
         id: messageId("user"),
         role: "user",
-        content: trimmed,
+        content,
         dcrRole: runtime ? current.selectedRole : undefined,
+        editable: Boolean(runtime && current.pendingActivityId),
+        answerType,
+        submittedValue: typeof value === "string" ? undefined : value,
+        contentOverride: typeof value !== "string",
+        checkpoint: runtime && current.pendingActivityId ? {
+          graphXml: current.graphXml!,
+          pendingActivityId: current.pendingActivityId,
+          selectedRole: current.selectedRole,
+        } : undefined,
       };
       const cleared = clearCandidateChoices(current);
       const working: ActiveSession = {
         ...cleared,
-        title: titleFromFirstQuestion(current, trimmed),
+        title: titleFromFirstQuestion(current, content),
         messages: [...cleared.messages, userMessage],
         updatedAt: Date.now(),
       };
@@ -349,12 +370,12 @@ export function useChatWorkspace(
       let response: ChatResponse;
       if (!current.id && current.mode === "dcr-controller") {
         response = await controller.startController(
-          trimmed,
+          content,
           requestOptions(settings, citizenInformation, signal),
         );
       } else if (!current.id && current.mode === "rag") {
         response = await controller.startRag(
-          trimmed,
+          content,
           settings,
           requestOptions(settings, citizenInformation, signal),
         );
@@ -362,23 +383,24 @@ export function useChatWorkspace(
         const role = resolveGraphDcrRole(current.selectedRole, current.graphXml);
         response = await controller.continueDcr(
           current.id,
-          trimmed,
+          value,
           role,
           current.robotAutoExecutionsPerActivity,
+          current.activityRepetitions,
           current.pendingActivityId,
           requestOptions(settings, citizenInformation, signal),
         );
       } else if (current.id && current.mode === "rag") {
         response = await controller.continueRag(
           current.id,
-          trimmed,
+          content,
           settings,
           requestOptions(settings, citizenInformation, signal),
         );
       } else if (current.id) {
         response = await controller.continueController(
           current.id,
-          trimmed,
+          content,
           requestOptions(settings, citizenInformation, signal),
         );
       } else {
@@ -387,6 +409,86 @@ export function useChatWorkspace(
       await finalizeResponse(response, working, previousHistory, signal);
     });
   }, [citizenInformation, controller, finalizeResponse, replaceActive, runRequest, settings]);
+
+  const editAnswer = useCallback(async (messageId: string, input: ChatInput) => {
+    const value = typeof input === "string" ? input.trim() : input;
+    if (value === "") return;
+
+    await runRequest(async ({ signal }) => {
+      const current = activeRef.current;
+      const answerIndex = current.messages.findIndex(({ id }) => id === messageId);
+      const answer = current.messages[answerIndex];
+      const checkpoint = answer?.checkpoint;
+      if (!current.id || answerIndex < 0 || !checkpoint) {
+        throw new Error("This answer cannot be edited because its DCR checkpoint is unavailable.");
+      }
+
+      const oldSessionId = current.id;
+      const content = typeof value === "boolean" ? value ? "Yes" : "No" : String(value);
+      const graphRole = resolveGraphDcrRole(checkpoint.selectedRole, checkpoint.graphXml);
+      const startResponse = await controller.startDcr(
+        checkpoint.graphXml,
+        graphRole,
+        current.robotAutoExecutionsPerActivity,
+        current.activityRepetitions,
+        requestOptions(settings, citizenInformation, signal),
+      );
+      if (!isDcrChatResponse(startResponse) || !startResponse.session_id) {
+        throw new Error("The DCR session could not be restored.");
+      }
+
+      const startHistory = await controller.history(startResponse.session_id, signal);
+      const questionIndex = answerIndex > 0 ? answerIndex - 1 : 0;
+      const archived = current.messages.slice(0, questionIndex).map((message) => ({
+        ...message,
+        historyIndex: undefined,
+        archived: true,
+      }));
+      const restored: ActiveSession = {
+        ...current,
+        id: startResponse.session_id,
+        graphXml: startResponse.graph_xml ?? checkpoint.graphXml,
+        pendingActivityId: startResponse.act_id ?? checkpoint.pendingActivityId,
+        pendingActivityRole: canonicalizeDcrRole(startResponse.dcr_role),
+        messages: [...archived, ...mergeChatHistory(startHistory)],
+        updatedAt: Date.now(),
+      };
+      const revisedAnswer: StoredChatMessage = {
+        id: answer.id,
+        role: "user",
+        content,
+        dcrRole: checkpoint.selectedRole,
+        editable: true,
+        answerType: answer.answerType,
+        submittedValue: typeof value === "string" ? undefined : value,
+        contentOverride: typeof value !== "string",
+        checkpoint,
+      };
+      const working: ActiveSession = {
+        ...restored,
+        messages: [...restored.messages, revisedAnswer],
+      };
+      try {
+        const response = await controller.continueDcr(
+          startResponse.session_id,
+          value,
+          graphRole,
+          current.robotAutoExecutionsPerActivity,
+          current.activityRepetitions,
+          restored.pendingActivityId,
+          requestOptions(settings, citizenInformation, signal),
+        );
+        await finalizeResponse(response, working, startHistory, signal);
+      } catch (reason) {
+        await controller.deleteSession(startResponse.session_id).catch(() => undefined);
+        throw reason;
+      }
+      if (oldSessionId !== startResponse.session_id) {
+        await controller.deleteSession(oldSessionId, signal);
+        await refreshSessionList();
+      }
+    });
+  }, [citizenInformation, controller, finalizeResponse, refreshSessionList, runRequest, settings]);
 
   const selectCandidate = useCallback(async (candidate: GraphCandidate) => {
     await runRequest(async ({ signal }) => {
@@ -416,6 +518,7 @@ export function useChatWorkspace(
         candidate.source,
         resolveGraphDcrRole(current.selectedRole, current.graphXml),
         current.robotAutoExecutionsPerActivity,
+        current.activityRepetitions,
         requestOptions(settings, citizenInformation, signal),
       );
       await finalizeResponse(response, working, previousHistory, signal);
@@ -427,20 +530,24 @@ export function useChatWorkspace(
     const roleChanged = nextSettings.dcrRole !== previous.selectedRole;
     const robotLimitChanged = nextSettings.robotAutoExecutionsPerActivity
       !== previous.robotAutoExecutionsPerActivity;
+    const activityLimitChanged = nextSettings.activityRepetitions
+      !== previous.activityRepetitions;
     setSettings(nextSettings);
-    if (previous.mode === "rag" || (!roleChanged && !robotLimitChanged)) return;
+    if (previous.mode === "rag" || (!roleChanged && !robotLimitChanged && !activityLimitChanged)) return;
 
     const current: ActiveSession = {
       ...discardUncommitted(previous),
       selectedRole: nextSettings.dcrRole,
       robotAutoExecutionsPerActivity: nextSettings.robotAutoExecutionsPerActivity,
+      activityRepetitions: nextSettings.activityRepetitions,
       updatedAt: Date.now(),
     };
     replaceActive(current);
     await persist(current);
 
-    if (!roleChanged || !current.id || !current.graphXml) return;
-    if (isRobotActivity(current.graphXml, current.pendingActivityId)) return;
+    if (!current.id || !current.graphXml) return;
+    if (!roleChanged && (!activityLimitChanged || current.pendingActivityId)) return;
+    if (roleChanged && isRobotActivity(current.graphXml, current.pendingActivityId)) return;
     if (isComplete(current.messages)) return;
 
     await runRequest(async ({ signal }) => {
@@ -449,6 +556,7 @@ export function useChatWorkspace(
         "",
         resolveGraphDcrRole(current.selectedRole, current.graphXml),
         current.robotAutoExecutionsPerActivity,
+        current.activityRepetitions,
         undefined,
         requestOptions(nextSettings, citizenInformation, signal),
       );
@@ -467,6 +575,7 @@ export function useChatWorkspace(
         : { mode: source.mode },
       source.selectedRole,
       source.robotAutoExecutionsPerActivity,
+      source.activityRepetitions,
     );
     historyRef.current = [];
     setSelectedCitation(undefined);
@@ -509,6 +618,7 @@ export function useChatWorkspace(
           ...current,
           dcrRole: record.selectedRole,
           robotAutoExecutionsPerActivity: record.robotAutoExecutionsPerActivity,
+          activityRepetitions: record.activityRepetitions,
         }));
         setSelectedCitation(undefined);
         replaceActive(restored);
@@ -550,6 +660,10 @@ export function useChatWorkspace(
 
   const stop = useCallback(() => requestRef.current?.abort(), []);
   const inputDisabledReason = inputLockReason(active);
+  const expectedAnswerType = useMemo(
+    () => expectedDcrAnswerType(active.graphXml, active.pendingActivityId),
+    [active.graphXml, active.pendingActivityId],
+  );
   const sessions = useMemo(
     () => storedSessions.map<ChatSessionSummary>((record) => ({
       id: record.id,
@@ -576,7 +690,9 @@ export function useChatWorkspace(
     notice,
     inputDisabled: Boolean(inputDisabledReason),
     inputDisabledReason,
+    expectedAnswerType,
     send,
+    editAnswer,
     clear,
     updateSettings,
     selectSession,
@@ -592,6 +708,7 @@ function createDraftSession(
   launch: ChatLaunchConfig,
   selectedRole: ChatSessionRecord["selectedRole"],
   robotAutoExecutionsPerActivity = DEFAULT_ROBOT_AUTO_EXECUTIONS_PER_ACTIVITY,
+  activityRepetitions = DEFAULT_ACTIVITY_REPETITIONS,
 ): ActiveSession {
   return {
     mode: launch.mode,
@@ -601,6 +718,7 @@ function createDraftSession(
     updatedAt: Date.now(),
     selectedRole,
     robotAutoExecutionsPerActivity,
+    activityRepetitions,
     graphName: launch.mode === "dcr" ? launch.graphName : undefined,
     graphXml: launch.mode === "dcr" ? launch.graphXml : undefined,
     messages: [],
@@ -673,7 +791,8 @@ function clearCandidateChoices(session: ActiveSession): ActiveSession {
 function discardUncommitted(session: ActiveSession): ActiveSession {
   return {
     ...session,
-    messages: session.messages.filter(({ historyIndex }) => historyIndex !== undefined),
+    messages: session.messages.filter(({ archived, historyIndex }) =>
+      archived || historyIndex !== undefined),
   };
 }
 
@@ -729,6 +848,7 @@ function draftAfterExpiry(session: ActiveSession): ActiveSession {
     updatedAt: Date.now(),
     selectedRole: session.selectedRole,
     robotAutoExecutionsPerActivity: session.robotAutoExecutionsPerActivity,
+    activityRepetitions: session.activityRepetitions,
     graphName: isDirect ? session.graphName : undefined,
     graphXml: isDirect ? session.graphXml : undefined,
     messages: [],

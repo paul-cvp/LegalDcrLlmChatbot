@@ -196,6 +196,54 @@
   margin-left: auto;
 }
 
+.dcrChat__editAnswer {
+  background: transparent;
+  border: 0;
+  color: var(--chat-accent-dark);
+  font-size: 1rem;
+  line-height: 1;
+  margin-left: auto;
+  opacity: 0.3;
+  padding: 0.15rem 0.25rem;
+  transition: opacity 120ms ease-in-out;
+}
+
+.dcrChat__editAnswer:hover:not(:disabled),
+.dcrChat__editAnswer:focus-visible {
+  opacity: 1;
+}
+
+.dcrChat__editAnswer + time {
+  margin-left: 0;
+}
+
+.dcrChat__answerEditor textarea {
+  border: 1px solid #9eabc0;
+  border-radius: 0.45rem;
+  line-height: 1.4;
+  min-width: min(28rem, 70vw);
+  padding: 0.55rem;
+  resize: vertical;
+}
+
+.dcrChat__answerEditor > div {
+  display: flex;
+  gap: 0.4rem;
+  justify-content: flex-end;
+  margin-top: 0.45rem;
+}
+
+.dcrChat__answerEditor button {
+  border: 1px solid var(--chat-border);
+  border-radius: 0.4rem;
+  padding: 0.35rem 0.65rem;
+}
+
+.dcrChat__answerEditor button[type="submit"] {
+  background: var(--chat-accent);
+  color: white;
+}
+
 .dcrChat__interpretation {
   color: var(--chat-muted);
   display: block;
@@ -349,6 +397,54 @@
   background: var(--chat-subtle);
   flex: 0 0 auto;
   padding: 0.6rem max(1rem, calc((100% - 58rem) / 2)) 1rem;
+}
+
+.dcrChat__answerWidget {
+  align-items: end;
+  background: var(--chat-surface);
+  border: 1px solid var(--chat-border);
+  border-radius: 0.65rem;
+  display: flex;
+  gap: 0.6rem;
+  margin-bottom: 0.55rem;
+  padding: 0.65rem;
+}
+
+.dcrChat__answerWidget label {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.dcrChat__answerWidget span {
+  color: var(--chat-muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.dcrChat__answerWidget > div {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.dcrChat__answerWidget input,
+.dcrChat__answerWidget button {
+  border: 1px solid #9eabc0;
+  border-radius: 0.45rem;
+  padding: 0.5rem 0.75rem;
+}
+
+.dcrChat__answerWidget button {
+  background: var(--chat-accent);
+  color: white;
+  min-width: 4.5rem;
+}
+
+.dcrChat__fieldError {
+  color: #81212a;
+  display: block;
+  font-size: 0.78rem;
 }
 
 .dcrChat__composer {

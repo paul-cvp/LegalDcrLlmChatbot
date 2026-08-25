@@ -551,6 +551,7 @@ GuardsAndTimeProvider.prototype.openMetadataPanel = function(element) {
   var parsed = parseComputation(originalComputation);
   var computationChanged = false;
   var originalTool = bo.get('toolCall');
+  var originalTrusted = bo.get('trusted');
   var toolChanged = false;
   var toolCalls = this._toolCalls;
   var questionButton = is(element, 'dcr:Event') && this._activityQuestionGenerator ?
@@ -610,7 +611,13 @@ GuardsAndTimeProvider.prototype.openMetadataPanel = function(element) {
         '</div>'
       : '') +
     '<div style="margin-bottom:12px">' +
-      '<label style="font-weight:600;display:block;margin-bottom:4px">Tool call</label>' +
+      '<div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">' +
+        '<label style="font-weight:600">Tool call</label>' +
+        '<label style="display:flex;align-items:center;gap:5px">' +
+          '<input id="_metadata_trusted" type="checkbox"' + (originalTrusted !== false ? ' checked' : '') + '/>' +
+          '<span>Trusted</span>' +
+        '</label>' +
+      '</div>' +
       '<select id="_metadata_tool"' + (toolCalls === null ? ' disabled' : '') +
         ' style="width:100%;box-sizing:border-box;padding:6px 8px;border:1px solid #ccc;border-radius:4px;background:white">' +
         toolOptions +
@@ -635,8 +642,14 @@ GuardsAndTimeProvider.prototype.openMetadataPanel = function(element) {
   var description = panel.querySelector('#_metadata_description');
   var priority = panel.querySelector('#_metadata_priority');
   var tool = panel.querySelector('#_metadata_tool');
+  var trusted = panel.querySelector('#_metadata_trusted');
   var error = panel.querySelector('#_metadata_err');
   tool.value = originalTool || '';
+
+  function updateTrustedAvailability() {
+    trusted.disabled = !tool.value;
+  }
+  updateTrustedAvailability();
 
   function renderVariableEditor() {
     var container = panel.querySelector('#_metadata_variable');
@@ -757,6 +770,7 @@ GuardsAndTimeProvider.prototype.openMetadataPanel = function(element) {
   tool.addEventListener('change', function() {
     toolChanged = true;
     if (tool.value) computationEditor.ensureToolInvocation();
+    updateTrustedAvailability();
     renderVariableEditor();
   });
   description.focus();
@@ -785,6 +799,7 @@ GuardsAndTimeProvider.prototype.openMetadataPanel = function(element) {
       description: description.value.trim() || undefined,
       priority: priorityValue,
       toolCall: toolChanged ? (tool.value || undefined) : originalTool,
+      trusted: trusted.checked,
       computation: computationChanged ?
         (computationEditor.computation.length ?
           JSON.stringify(computationEditor.computation) : undefined) :

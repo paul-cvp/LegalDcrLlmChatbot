@@ -165,6 +165,7 @@ class _EditorXmlImporter:
 
         if isinstance(parsed, DcrActivity):
             parsed.priority = self._priority(element)
+            parsed.trusted = self._boolean(element, "trusted", True)
             parsed.takesInput = self._boolean(
                 element, "takesInput", parsed.eventData is not None
             )

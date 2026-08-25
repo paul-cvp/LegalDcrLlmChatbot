@@ -183,7 +183,7 @@ class DcrActivity(DcrElement):
                  pending=False, 
                  computation: DcrComputation=None, 
                  takesInput=False, 
-                 trusted = True,
+                 trusted: bool = True,
                  eventData: DcrEventData=None,
                  template=None, **kwargs):
         super().__init__(id, template=template, **kwargs)
@@ -201,7 +201,8 @@ class DcrActivity(DcrElement):
         self.__data = self.__eventData.default if self.__eventData is not None else None
         # if self.__takesInput and not self.__eventData:
         #     self.__eventData = DcrEventData()
-        self.__trusted = trusted # Only relevant in relation to tool calls by default it is true
+        # Trust only affects tool calls and defaults to true for compatibility.
+        self.__trusted = trusted if template is None else template.trusted
         self.__tool_call = lambda x : x if template is None else template.tool_call
         self.__priority = priority if template is None else template.priority
 
@@ -384,8 +385,20 @@ class DcrParentElement(DcrElement):
 
 class DcrSubprocess(DcrActivity, DcrParentElement):
     
-    def __init__(self, id, children=None, included=True, pending=False, computation=None, template=None):
-        super().__init__(id=id, included=included, pending=pending, computation=computation, takesInput=False, template=template, children=children)
+    def __init__(
+        self, id, children=None, included=True, pending=False,
+        computation=None, trusted=True, template=None
+    ):
+        super().__init__(
+            id=id,
+            included=included,
+            pending=pending,
+            computation=computation,
+            takesInput=False,
+            trusted=trusted,
+            template=template,
+            children=children,
+        )
     
 
 class DcrNesting(DcrParentElement):

@@ -6,9 +6,11 @@ import {
   extractAutomaticRobotExecutions,
   extractBracketCitations,
   extractDcrToolEvidence,
+  expectedDcrAnswerType,
   isRobotActivity,
   mergeChatHistory,
   normalizeRagEvidence,
+  parseDcrActivities,
   resolveGraphDcrRole,
 } from "./normalization";
 
@@ -46,6 +48,19 @@ describe("DCR normalization", () => {
     expect(resolveGraphDcrRole("Caseworker", GRAPH_XML)).toBe("Case worker");
     expect(isRobotActivity(GRAPH_XML, "law")).toBe(true);
     expect(isRobotActivity(GRAPH_XML, "case")).toBe(false);
+  });
+
+  it("detects typed answers and Robot permission answers", () => {
+    const graph = `<dcr:definitions xmlns:dcr="http://tk/schema/dcr"><dcr:dcrGraph id="typed">
+      <dcr:event id="age" role="Citizen"><dcr:eventData name="age" type="Int" /></dcr:event>
+      <dcr:event id="eligible" role="Citizen"><dcr:eventData name="eligible" type="Bool" /></dcr:event>
+      <dcr:event id="robot" role="Robot"><dcr:eventData name="result" type="String" /></dcr:event>
+    </dcr:dcrGraph></dcr:definitions>`;
+
+    expect(expectedDcrAnswerType(graph, "age")).toBe("int");
+    expect(expectedDcrAnswerType(graph, "eligible")).toBe("bool");
+    expect(expectedDcrAnswerType(graph, "robot")).toBe("bool");
+    expect(parseDcrActivities(graph).every(({ trusted }) => trusted)).toBe(true);
   });
 
   it("normalizes RAG evidence for both analysis panels", () => {
@@ -275,6 +290,34 @@ describe("DCR normalization", () => {
       role: "assistant",
       content: "When did this happen?",
       historyIndex: 2,
+    });
+  });
+
+  it("preserves edit checkpoints after hidden interpretation entries", () => {
+    const checkpoint = {
+      graphXml: GRAPH_XML,
+      pendingActivityId: "case",
+      selectedRole: "Citizen" as const,
+    };
+    const stored = [
+      { id: "first", role: "user" as const, content: "first", historyIndex: 0 },
+      { id: "question", role: "assistant" as const, content: "Next?", historyIndex: 2 },
+      { id: "second", role: "user" as const, content: "second", checkpoint, editable: true },
+    ];
+    const backendHistory: ChatHistoryEntry[] = [
+      history("first", "user", "Citizen"),
+      { item: "Interpreted as True", chat_role: "assistant", dcr_role: "Citizen", metadata: { interpreted: true } },
+      history("Next?", "assistant", "Citizen"),
+      history("second", "user", "Citizen"),
+    ];
+
+    const merged = mergeChatHistory(backendHistory, stored);
+
+    expect(merged.at(-1)).toMatchObject({
+      id: "second",
+      editable: true,
+      checkpoint,
+      historyIndex: 3,
     });
   });
 });

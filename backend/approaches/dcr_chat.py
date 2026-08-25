@@ -24,6 +24,25 @@ LOGGER = logging.getLogger("uvicorn.error")
 ROBOT_AUTO_EXECUTIONS_ENV = "DCR_ROBOT_AUTO_EXECUTIONS_PER_ACTIVITY"
 
 
+class ActivityRepeatPolicy:
+    """Limit repeat executions of user activities."""
+
+    def __init__(self, repeat_limit: int = 0) -> None:
+        self.repeat_limit = 0
+        self.set_repeat_limit(repeat_limit)
+
+    def set_repeat_limit(self, repeat_limit: int) -> None:
+        if repeat_limit < -1:
+            raise ValidationError("activity_repeat_limit must be -1 or greater.")
+        self.repeat_limit = repeat_limit
+
+    def allows(self, activity: DcrActivity, trace: list[DcrExecution]) -> bool:
+        if self.repeat_limit == -1:
+            return True
+        executions = sum(item.activityID == activity.ID for item in trace)
+        return executions <= self.repeat_limit
+
+
 @dataclass(frozen=True)
 class RobotOccurrence:
     activity_id: str
@@ -113,6 +132,7 @@ class DcrChat(ChatWithHistory):
         input_interpreter: InterpretInput | None = None,
         output_interpreter: InterpretOutput | None = None,
         robot_auto_limit: int | None = None,
+        activity_repeat_limit: int = 0,
         user_context: str | None = None,
         use_citizen_data: bool = False,
     ) -> None:
@@ -128,6 +148,7 @@ class DcrChat(ChatWithHistory):
             if robot_auto_limit is not None
             else RobotExecutionPolicy.from_environment()
         )
+        self._activity_repeat_policy = ActivityRepeatPolicy(activity_repeat_limit)
         self._i_llm_tool = input_interpreter or InterpretInput()
         self._o_llm_tool = output_interpreter or InterpretOutput()
     
@@ -177,18 +198,18 @@ class DcrChat(ChatWithHistory):
             act.description = None
         self.trace.append(execution)
 
-        msg = f"In answering the query '{act.description}' " if act.description else ""
-        msg += f"The answer is: {act.data}" if act.data else ""
-        self.record_response(
-            item=f"{msg}",
-            chat_role="assistant",
-            dcr_role=dcr_role,
-            metadata={
-                "robot_execution": False,
-                "activity_id": act.ID,
-                "activity_label": act.label,
-            },
-        )
+        # msg = f"In answering the query '{act.description}' " if act.description else ""
+        # msg += f"The answer is: {act.data}" if act.data else ""
+        # self.record_response(
+        #     item=f"{msg}",
+        #     chat_role="assistant",
+        #     dcr_role=dcr_role,
+        #     metadata={
+        #         "robot_execution": False,
+        #         "activity_id": act.ID,
+        #         "activity_label": act.label,
+        #     },
+        # )
 
 
     async def handle_robot_permission(self, request: DcrChatRequest) -> bool:
@@ -270,25 +291,34 @@ class DcrChat(ChatWithHistory):
     def get_activities_by_role(self, active_role):
         robot_acts = []
         denied_robot_acts = []
+        capped_active_role_acts = []
         active_role_acts = []
         non_active_role_acts = []
         element_list = []
-        if len(self._enabled_pending)>0:
-            element_list = self._enabled_pending
-        elif len(self._enabled_events)>0:
+
+        if len(self._enabled_pending) > 0:
+            element_list = self._enabled_pending | {
+                act for act in self._enabled_events
+                if act.role == active_role or act.role is None
+            }
+        elif len(self._enabled_events) > 0:
             element_list = self._enabled_events
         else:
             print("[i] Nothing to execute")
+
         for act in element_list:
-            if act.role == 'Robot':
+            if act.role == "Robot":
                 should_execute = self.check_what_robot_executes(act)
                 if should_execute:
                     if self._robot_policy.is_current_occurrence_denied(act):
                         denied_robot_acts.append(act)
                     else:
                         robot_acts.append(act)
-            elif act.role == active_role or act.role == None:
-                active_role_acts.append(act)
+            elif act.role == active_role or act.role is None:
+                if self._activity_repeat_policy.allows(act, self.trace):
+                    active_role_acts.append(act)
+                else:
+                    capped_active_role_acts.append(act)
             else:
                 non_active_role_acts.append(act)
 
@@ -296,13 +326,17 @@ class DcrChat(ChatWithHistory):
         if denied_robot_acts and not robot_acts:
             for act in self._enabled_events - set(element_list):
                 if act.role == active_role or act.role is None:
-                    active_role_acts.append(act)
+                    if self._activity_repeat_policy.allows(act, self.trace):
+                        active_role_acts.append(act)
+                    else:
+                        capped_active_role_acts.append(act)
                 elif act.role != "Robot":
                     non_active_role_acts.append(act)
-        return robot_acts, active_role_acts, non_active_role_acts, denied_robot_acts
+
+        return robot_acts, active_role_acts, non_active_role_acts, denied_robot_acts, capped_active_role_acts
 
     async def pick_next_user_activity(self, active_role) -> DcrActivity:
-        robot_acts, active_role_acts, non_active_role_acts, denied_robot_acts = self.get_activities_by_role(active_role)
+        robot_acts, active_role_acts, non_active_role_acts, denied_robot_acts, capped_active_role_acts = self.get_activities_by_role(active_role)
         while len(robot_acts)>0:
             robo_act = robot_acts.pop()
             if not self._robot_policy.can_execute_automatically(robo_act):
@@ -313,7 +347,7 @@ class DcrChat(ChatWithHistory):
             if success:
                 self._robot_policy.record_automatic_execution(robo_act)
                 await self.refresh_set_of_activities()
-                robot_acts, active_role_acts, non_active_role_acts, denied_robot_acts = self.get_activities_by_role(active_role)
+                robot_acts, active_role_acts, non_active_role_acts, denied_robot_acts, capped_active_role_acts = self.get_activities_by_role(active_role)
                 LOGGER.info("DCR Chat: Robot activity %s executed automatically (%s/%s)", robo_act.ID, self._robot_policy.automatic_counts[robo_act.ID], self._robot_policy.automatic_limit,
                 )
         if len(active_role_acts)>0:
@@ -321,15 +355,23 @@ class DcrChat(ChatWithHistory):
             for act in active_role_acts:
                 print(f"[i] \t Label: {act.label} - priority: {act.priority}")
             return prioritize_user_activities(active_role_acts,self._dcr_graph, self.trace)[0]
-        elif len(non_active_role_acts)>0:
-            self.record_response(item=f"You don't have anything to execute! We have notified the other roles about their activities!", chat_role="assistant", dcr_role=active_role)
-            print("[i] You don't have anything to execute! We have notified the other roles about their activities!")
-            return None
         elif len(denied_robot_acts)>0:
             labels = ", ".join(activity.label for activity in denied_robot_acts)
             message = f"The process is waiting because permission for Robot activity {labels} was denied."
             self.record_response(item=message, chat_role="assistant", dcr_role=active_role)
             LOGGER.info("DCR Chat: %s", message)
+            return None
+        elif capped_active_role_acts:
+            message = (
+                "The process is complete!"
+                if self._dcr_graph.isAccepting()
+                else "You have completed all currently enabled activities allowed by the repetition setting. Other roles will continue working on the case."
+            )
+            self.record_response(item=message, chat_role="assistant", dcr_role=active_role)
+            return None
+        elif len(non_active_role_acts)>0:
+            self.record_response(item=f"You don't have anything to execute! We have notified the other roles about their activities!", chat_role="assistant", dcr_role=active_role)
+            print("[i] You don't have anything to execute! We have notified the other roles about their activities!")
             return None
         else:
             print("[i] The process is complete!")
@@ -367,13 +409,19 @@ class DcrChat(ChatWithHistory):
     async def run(self, request: DcrChatRequest) -> DcrChatResponse|ChatSessionResponse:
         if request.robot_auto_limit is not None:
             self._robot_policy.set_automatic_limit(request.robot_auto_limit)
+        if request.activity_repeat_limit is not None:
+            self._activity_repeat_policy.set_repeat_limit(request.activity_repeat_limit)
         pending = self._robot_policy.pending
         if pending is not None:
             if request.act_id != pending.activity_id:
                 raise ValidationError(f"Answer the pending Robot permission for activity {pending.activity_id!r} before continuing.")
             await self.handle_robot_permission(request)
         elif request.act_id:
-            await self.execute_activity_with_chat(request)
+            activity = self.get_dcr_activity(request.act_id)
+            if activity is None or self._activity_repeat_policy.allows(activity, self.trace):
+                await self.execute_activity_with_chat(request)
+            else:
+                LOGGER.info("DCR Chat: activity %s reached its repetition limit", activity.ID)
         res = await self.present_question_to_user(active_role=request.dcr_role)
         if res:
             return res

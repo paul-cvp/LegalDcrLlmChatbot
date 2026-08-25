@@ -19,8 +19,8 @@ const activityXML = `<?xml version="1.0" encoding="UTF-8"?>
     <dcr:event id="Source" label="Source" included="true" executed="false" pending="false" takesInput="false" computation="${xmlComputation}">
       <dcr:eventData name="threshold" type="Bool" />
     </dcr:event>
-    <dcr:subProcess id="Flow" label="Flow" role="Robot" priority="2" included="true" executed="false" pending="false" takesInput="false" computation="[]" toolCall="find_similar_cases">
-      <dcr:event id="Child" label="Child" included="true" executed="false" pending="false" takesInput="false" />
+    <dcr:subProcess id="Flow" label="Flow" role="Robot" priority="2" included="true" executed="false" pending="false" takesInput="false" computation="[]" toolCall="find_similar_cases" trusted="false">
+      <dcr:event id="Child" label="Child" included="true" executed="false" pending="false" takesInput="false" trusted="true" />
     </dcr:subProcess>
     <dcr:relation id="SetValue" type="setValue" sourceRef="Source" targetRef="Child" value="1" guard="threshold == true" guardComputation="[{&quot;tuple&quot;:[&quot;source&quot;,&quot;data&quot;]},&quot;==&quot;,true]" valueComputation="[{&quot;tuple&quot;:[&quot;source&quot;,&quot;data&quot;]},&quot;&gt;=&quot;,18]" />
   </dcr:dcrGraph>
@@ -45,6 +45,16 @@ async function createModeler() {
 }
 
 describe("activity computations and tool calls", () => {
+  it("renders enabled state for events with arbitrary IDs", async () => {
+    const modeler = await createModeler();
+    const graph = moddleToDCR(modeler.getElementRegistry());
+
+    modeler.updateRendering(graph);
+
+    expect(modeler.getElementRegistry().get("Source").businessObject.enabled).toBe(true);
+    modeler.destroy();
+  });
+
   it("allows non-modeling views to disable metadata editing", async () => {
     const modeler = new Modeler({
       container: document.createElement("div"),
@@ -68,6 +78,7 @@ describe("activity computations and tool calls", () => {
       priority: 2,
       computation: "[]",
       toolCall: "find_similar_cases",
+      trusted: false,
     });
     expect(relation).toMatchObject({
       guard: "threshold == true",
@@ -80,6 +91,8 @@ describe("activity computations and tool calls", () => {
     const reparsed = await createModdle().fromXML(saved.xml, "dcr:Definitions");
     expect(reparsed.elementsById.Source.computation).toBe(computation);
     expect(reparsed.elementsById.Flow.toolCall).toBe("find_similar_cases");
+    expect(reparsed.elementsById.Flow.trusted).toBe(false);
+    expect(reparsed.elementsById.Child.trusted).toBe(true);
     expect(reparsed.elementsById.SetValue.guardComputation)
       .toBe('[{"tuple":["source","data"]},"==",true]');
     expect(reparsed.elementsById.SetValue.valueComputation)
@@ -103,8 +116,13 @@ describe("activity computations and tool calls", () => {
       .toEqual(["string", "number", "boolean", "tuple2", "tuple4"]);
     expect(document.querySelector("#_metadata_var_name").value).toBe("threshold");
     const tool = document.querySelector("#_metadata_tool");
+    const trusted = document.querySelector("#_metadata_trusted");
+    expect(trusted.checked).toBe(true);
+    expect(trusted.disabled).toBe(true);
     tool.value = "find_relevant_laws";
     tool.dispatchEvent(new Event("change"));
+    expect(trusted.disabled).toBe(false);
+    trusted.checked = false;
     expect(document.querySelector("#_metadata_var_name")).toBeNull();
     expect(document.querySelector("#_metadata_variable").textContent)
       .toContain("provided automatically as String");
@@ -127,12 +145,14 @@ describe("activity computations and tool calls", () => {
       type: "String",
     });
     expect(source.businessObject.takesInput).toBe(false);
+    expect(source.businessObject.trusted).toBe(false);
     expect(tokens.filter((token) => token.tuple?.[0] === "source" && token.tuple?.[1] === "tool"))
       .toHaveLength(1);
     expect(tokens.at(-1)).toBe(4.5);
     modeler.get("commandStack").undo();
     expect(source.businessObject.toolCall).toBeUndefined();
     expect(source.businessObject.computation).toBe(computation);
+    expect(source.businessObject.trusted).toBeUndefined();
     expect(source.businessObject.eventData).toMatchObject({
       name: "threshold",
       type: "Bool",
@@ -198,6 +218,7 @@ describe("activity computations and tool calls", () => {
 
     provider.openMetadataPanel(flow);
     expect(document.querySelector("#_metadata_tool").disabled).toBe(true);
+    expect(document.querySelector("#_metadata_trusted").checked).toBe(false);
     expect(document.querySelector("#_metadata_variable").textContent)
       .toContain("provided automatically as String");
     document.querySelector("#_metadata_description").value = "Updated";
@@ -209,6 +230,7 @@ describe("activity computations and tool calls", () => {
       type: "String",
     });
     expect(flow.businessObject.takesInput).toBe(false);
+    expect(flow.businessObject.trusted).toBe(false);
 
     provider.setToolCalls(tools);
     provider.openMetadataPanel(flow);
