@@ -97,13 +97,15 @@ export function expectedDcrAnswerType(
   activityId: string | undefined,
 ): "int" | "bool" | undefined {
   if (!graphXml || !activityId) return undefined;
-  const activity = parseDcrActivities(graphXml).find((item) => item.id === activityId);
+  const activity = parseDcrActivities(graphXml)
+    .find((item) => activityIdMatches(item.id, activityId));
   return canonicalizeDcrRole(activity?.role) === "Robot" ? "bool" : activity?.dataType;
 }
 
 export function isRobotActivity(graphXml: string | undefined, activityId: string | undefined): boolean {
   if (!graphXml || !activityId) return false;
-  const activity = parseDcrActivities(graphXml).find((item) => item.id === activityId);
+  const activity = parseDcrActivities(graphXml)
+    .find((item) => activityIdMatches(item.id, activityId));
   return canonicalizeDcrRole(activity?.role) === "Robot";
 }
 
@@ -343,9 +345,12 @@ function activityHistoryMatches(historyItem: string, label: string): boolean {
 
 function activityIdMatches(graphId: string, historyId: string | undefined): boolean {
   if (!historyId) return false;
-  return graphId === historyId
-    || graphId === `Event_${historyId}`
-    || graphId === `SubProcess_${historyId}`;
+  if (graphId === historyId) return true;
+  return unprefixedActivityId(graphId) === unprefixedActivityId(historyId);
+}
+
+function unprefixedActivityId(id: string): string {
+  return id.replace(/^(?:Event_|SubProcess_)/, "");
 }
 
 function activityResult(historyItem: string): string {

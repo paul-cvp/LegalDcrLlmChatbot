@@ -52,14 +52,17 @@ describe("DCR normalization", () => {
 
   it("detects typed answers and Robot permission answers", () => {
     const graph = `<dcr:definitions xmlns:dcr="http://tk/schema/dcr"><dcr:dcrGraph id="typed">
-      <dcr:event id="age" role="Citizen"><dcr:eventData name="age" type="Int" /></dcr:event>
+      <dcr:event id="Event_age" role="Citizen"><dcr:eventData name="age" type="Int" /></dcr:event>
       <dcr:event id="eligible" role="Citizen"><dcr:eventData name="eligible" type="Bool" /></dcr:event>
-      <dcr:event id="robot" role="Robot"><dcr:eventData name="result" type="String" /></dcr:event>
+      <dcr:event id="Event_robot" role="Robot"><dcr:eventData name="result" type="String" /></dcr:event>
     </dcr:dcrGraph></dcr:definitions>`;
 
     expect(expectedDcrAnswerType(graph, "age")).toBe("int");
+    expect(expectedDcrAnswerType(graph, "Event_age")).toBe("int");
     expect(expectedDcrAnswerType(graph, "eligible")).toBe("bool");
+    expect(expectedDcrAnswerType(graph, "Event_eligible")).toBe("bool");
     expect(expectedDcrAnswerType(graph, "robot")).toBe("bool");
+    expect(isRobotActivity(graph, "robot")).toBe(true);
     expect(parseDcrActivities(graph).every(({ trusted }) => trusted)).toBe(true);
   });
 
