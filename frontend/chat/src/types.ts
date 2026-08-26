@@ -49,6 +49,7 @@ export interface ChatMessage {
   candidates?: readonly GraphCandidate[];
   editable?: boolean;
   answerType?: ExpectedAnswerType;
+  toolTrusted?: boolean;
 }
 
 export interface ChatSessionSummary {
@@ -64,6 +65,8 @@ export interface ChatSettings {
   dcrRole: DcrRole;
   robotAutoExecutionsPerActivity: number;
   activityRepetitions: number;
+  useChatHistory: boolean;
+  useChatData: boolean;
   useCitizenInformation: boolean;
   searchIndex: SearchIndex;
   suggestFollowupQuestions: boolean;

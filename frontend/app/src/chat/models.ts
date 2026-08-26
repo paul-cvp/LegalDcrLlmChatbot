@@ -51,6 +51,7 @@ export interface StoredChatMessage {
   candidates?: readonly StoredGraphCandidate[];
   editable?: boolean;
   answerType?: ExpectedAnswerType;
+  toolTrusted?: boolean;
   submittedValue?: ChatInput;
   /** State immediately before this DCR answer was submitted. */
   checkpoint?: DcrAnswerCheckpoint;

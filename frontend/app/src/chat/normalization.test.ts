@@ -27,7 +27,7 @@ const ALL_TOOLS_GRAPH_XML = `<dcr:definitions xmlns:dcr="http://tk/schema/dcr">
     <dcr:event id="Event_law" label="Relevant laws" role="Robot"
       toolCall="find_relevant_laws" included="true" />
     <dcr:event id="Event_cases" label="Similar cases" role="Citizen"
-      toolCall="find_similar_cases" included="true" />
+      toolCall="find_similar_cases" trusted="false" included="true" />
     <dcr:event id="Event_summary" label="Case summary" role="Case worker"
       toolCall="summarize_case_history" included="true" />
     <dcr:event id="Event_review" label="Review" role="Case worker" included="true" />
@@ -117,6 +117,7 @@ describe("DCR normalization", () => {
       activityId: "law",
       historyIndex: 1,
       toolCall: "find_relevant_laws",
+      trusted: true,
       text: result,
       supportingContent: [{
         id: "dcr-support-1-law",
@@ -172,24 +173,28 @@ describe("DCR normalization", () => {
 
     const evidence = extractDcrToolEvidence(previous, current, ALL_TOOLS_GRAPH_XML);
 
-    expect(evidence.map(({ activityId, toolCall, text }) => ({
+    expect(evidence.map(({ activityId, toolCall, trusted, text }) => ({
       activityId,
       toolCall,
+      trusted,
       text,
     }))).toEqual([
       {
         activityId: "Event_law",
         toolCall: "find_relevant_laws",
+        trusted: true,
         text: "Law result [laws/support.pdf#page=4]",
       },
       {
         activityId: "Event_cases",
         toolCall: "find_similar_cases",
+        trusted: false,
         text: "Case result [cases/example.json]",
       },
       {
         activityId: "Event_summary",
         toolCall: "summarize_case_history",
+        trusted: true,
         text: "Summary [laws/summary.pdf#page=2]",
       },
     ]);

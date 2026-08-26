@@ -1,46 +1,61 @@
+{% if process_info %}
+Process information:
+{{ process_info }}
+
+{% endif %}
 {% if user_info %}
-User information:
+Citizen information:
 {{ user_info }}
 
 {% endif %}
-{% if user_data %}
-Available case history and data:
-{{ user_data }}
+{% if trace_data_available and trace_data %}
+DCR trace data:
+{{ trace_data }}
+
+{% endif %}
+{% if chat_history %}
+Chat history:
+{% for entry in chat_history %}
+- {{ entry.chat_role }}{% if entry.dcr_role %} ({{ entry.dcr_role }}){% endif %}: {{ entry.item }}
+{% endfor %}
 
 {% endif %}
 Current case or question:
 {{ query }}
 
-Closest cases overall:
 {% if closest %}
+Closest cases overall:
 {% for case in closest %}
 [{{ case.source }}] Outcome: {{ case.outcome.value }}
 {{ case.text }}
 
 {% endfor %}
-{% else %}
-No similar cases were retrieved.
 {% endif %}
 
+{% if clusters.positive %}
 Positive-outcome cluster:
 {% for case in clusters.positive %}
 [{{ case.source }}] {{ case.text }}
-{% else %}
-No positive-outcome cases were retrieved.
 {% endfor %}
+{% endif %}
 
+{% if clusters.negative %}
 Negative-outcome cluster:
 {% for case in clusters.negative %}
 [{{ case.source }}] {{ case.text }}
-{% else %}
-No negative-outcome cases were retrieved.
 {% endfor %}
+{% endif %}
 
+{% if clusters.unknown %}
 Unknown-outcome cluster:
 {% for case in clusters.unknown %}
 [{{ case.source }}] {{ case.text }}
-{% else %}
-No unknown-outcome cases were retrieved.
 {% endfor %}
+{% endif %}
 
+{% if has_cases %}
 Compare the current case with both the closest cases and the outcome clusters.
+{% else %}
+No similar cases were retrieved. State this concisely without creating comparison
+or outcome-cluster sections.
+{% endif %}

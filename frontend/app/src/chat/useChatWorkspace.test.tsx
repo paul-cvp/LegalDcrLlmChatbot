@@ -111,11 +111,17 @@ describe("useChatWorkspace", () => {
     await act(async () => workspace.current.updateSettings({
       ...workspace.current.settings,
       useCitizenInformation: true,
+      useChatHistory: false,
+      useChatData: false,
     }));
     await act(async () => workspace.current.send("I need support"));
     expect(requests[0]).toMatchObject({
       citizen_information: "Cached citizen profile",
-      metadata: { use_citizen_data: true },
+      metadata: {
+        use_chat_history: false,
+        use_trace_data: false,
+        use_citizen_data: true,
+      },
     });
     const candidate = workspace.current.messages[1]?.candidates?.[0];
     expect(candidate?.description).toBe("Option 1");
@@ -130,7 +136,11 @@ describe("useChatWorkspace", () => {
       robot_auto_limit: 1,
       activity_repeat_limit: 0,
       citizen_information: "Cached citizen profile",
-      metadata: { use_citizen_data: true },
+      metadata: {
+        use_chat_history: false,
+        use_trace_data: false,
+        use_citizen_data: true,
+      },
     });
     expect(workspace.current.messages[2]?.content).toBe("Option 1");
     expect(workspace.current.inputDisabledReason).toContain("Caseworker");
@@ -152,7 +162,11 @@ describe("useChatWorkspace", () => {
       robot_auto_limit: 1,
       activity_repeat_limit: 0,
       citizen_information: "Cached citizen profile",
-      metadata: { use_citizen_data: true },
+      metadata: {
+        use_chat_history: false,
+        use_trace_data: false,
+        use_citizen_data: true,
+      },
     });
     expect(workspace.current.notice).toBeNull();
     expect(workspace.current.inputDisabledReason).toBe("The process is complete.");
@@ -190,6 +204,11 @@ describe("useChatWorkspace", () => {
       dcr_role: "Citizen",
       robot_auto_limit: 1,
       activity_repeat_limit: 0,
+      metadata: {
+        use_chat_history: true,
+        use_trace_data: true,
+        use_citizen_data: false,
+      },
     });
     expect(workspace.current.messages).toHaveLength(1);
     expect(workspace.current.messages[0]?.role).toBe("assistant");
@@ -369,6 +388,11 @@ describe("useChatWorkspace", () => {
       dcr_role: "Case worker",
       robot_auto_limit: 1,
       activity_repeat_limit: 0,
+      metadata: {
+        use_chat_history: true,
+        use_trace_data: true,
+        use_citizen_data: false,
+      },
     });
     expect(workspace.current.messages.at(-1)?.content).toBe("Caseworker question");
   });
@@ -536,6 +560,8 @@ describe("useChatWorkspace", () => {
     await act(async () => workspace.current.updateSettings({
       ...workspace.current.settings,
       useCitizenInformation: true,
+      useChatHistory: false,
+      useChatData: false,
     }));
     await act(async () => workspace.current.send("What applies?"));
     const answer = workspace.current.messages.at(-1);
@@ -550,6 +576,7 @@ describe("useChatWorkspace", () => {
       search_indexes: ["find_relevant_laws", "find_similar_cases"],
       generate_followups: true,
       use_citizen_data: true,
+      use_chat_history: false,
     });
     expect(requests[0]?.citizen_information).toBe("Cached citizen profile");
 
@@ -564,6 +591,7 @@ describe("useChatWorkspace", () => {
       search_indexes: ["find_similar_cases"],
       generate_followups: false,
       use_citizen_data: true,
+      use_chat_history: false,
     });
   });
 
@@ -573,7 +601,7 @@ describe("useChatWorkspace", () => {
         <dcr:event id="Event_law" label="Check law" role="Robot"
           toolCall="find_relevant_laws" included="true" />
         <dcr:event id="Event_summary" label="Case summary" role="Case worker"
-          toolCall="summarize_case_history" included="true" />
+          toolCall="summarize_case_history" trusted="false" included="true" />
       </dcr:dcrGraph>
     </dcr:definitions>`;
     const history: ChatHistoryEntry[] = [{
@@ -612,6 +640,7 @@ describe("useChatWorkspace", () => {
 
     expect(workspace.current.messages[0]?.supportingContent?.[0]?.content)
       .toBe("Rule [laws/rule.pdf#page=2]");
+    expect(workspace.current.messages[0]?.toolTrusted).toBe(true);
     expect(workspace.current.messages[0]?.citations?.[0]).toMatchObject({
       source: "laws/rule.pdf",
       page: 2,
@@ -619,6 +648,7 @@ describe("useChatWorkspace", () => {
     });
     expect(workspace.current.messages[1]?.supportingContent?.[0]?.content)
       .toBe("Summary without sources");
+    expect(workspace.current.messages[1]?.toolTrusted).toBe(false);
     expect(workspace.current.messages[1]?.citations).toEqual([]);
   });
 

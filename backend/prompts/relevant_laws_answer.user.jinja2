@@ -1,11 +1,23 @@
+{% if process_info %}
+Process information:
+{{ process_info }}
+
+{% endif %}
 {% if user_info %}
-User information:
+Citizen information:
 {{ user_info }}
 
 {% endif %}
-{% if user_data %}
-Available case history and data:
-{{ user_data }}
+{% if trace_data_available and trace_data %}
+DCR trace data:
+{{ trace_data }}
+
+{% endif %}
+{% if chat_history %}
+Chat history:
+{% for entry in chat_history %}
+- {{ entry.chat_role }}{% if entry.dcr_role %} ({{ entry.dcr_role }}){% endif %}: {{ entry.item }}
+{% endfor %}
 
 {% endif %}
 Question:
@@ -22,4 +34,9 @@ Retrieved legal sources:
 No legal source excerpts were retrieved.
 {% endif %}
 
-Answer the question using only these sources.
+{% if sources %}
+Answer the question using only these legal sources and the available case context.
+{% else %}
+State concisely that no legal source excerpts were retrieved; do not provide an
+unsupported legal answer.
+{% endif %}

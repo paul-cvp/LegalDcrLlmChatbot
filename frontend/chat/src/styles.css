@@ -196,6 +196,29 @@
   margin-left: auto;
 }
 
+.dcrChat__toolTrust {
+  display: inline-flex;
+  margin-left: auto;
+}
+
+.dcrChat__toolTrust svg {
+  fill: currentColor;
+  height: 0.9rem;
+  width: 0.9rem;
+}
+
+.dcrChat__toolTrust--trusted {
+  color: #17803d;
+}
+
+.dcrChat__toolTrust--untrusted {
+  color: #c62828;
+}
+
+.dcrChat__toolTrust + time {
+  margin-left: 0;
+}
+
 .dcrChat__editAnswer {
   background: transparent;
   border: 0;

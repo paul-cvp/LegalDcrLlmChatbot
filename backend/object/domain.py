@@ -39,14 +39,16 @@ class RagSearchIndex(str, Enum):
     SIMILAR_CASES = "find_similar_cases"
 
 
-class RagChatMetadata(BaseModel):
+class ChatMetadata(BaseModel):
+    use_chat_history: bool = True
+    use_citizen_information: bool = True
+
+class DcrChatMetadata(ChatMetadata):
+    use_trace_data : bool = True
+
+class RagChatMetadata(ChatMetadata):
     search_indexes: list[RagSearchIndex] = Field(default_factory=list)
     generate_followups: bool = False
-    use_chat_history : bool = False
-    use_citizen_data : bool = False
-
-class DcrChatMetadata(BaseModel):
-    use_citizen_data : bool = False
 
 class ChatRequest(BaseModel):
     text: str|int|bool
@@ -95,6 +97,7 @@ class RagChatResponse(ChatSessionResponse):
     evidence: list[RagEvidence]
 
 class DcrChatRequest(ChatSessionRequest):
+    metadata: DcrChatMetadata | None = None
     graph_xml: str | None = None
     act_id: str | None = None
     dcr_role: str | None = None

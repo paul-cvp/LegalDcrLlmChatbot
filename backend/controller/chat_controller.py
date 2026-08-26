@@ -14,9 +14,11 @@ from object.domain import (
     ChatSessionRequest,
     ChatSessionResponse,
     ChatType,
+    DcrChatMetadata,
     DcrChatRequest,
     DcrChatResponse,
     DcrControllerChatResponse,
+    RagChatMetadata,
     RagChatResponse,
 )
 from object.errors import NotFoundError
@@ -55,13 +57,15 @@ class ChatController:
         graph_xml: str | None = None,
         robot_auto_limit: int | None = None,
         user_context: str| None = None,
-        use_citizen_data: bool = False
+        metadata: DcrChatMetadata|RagChatMetadata = None
     ) -> ChatWithHistory:
         approach = cls.APPROACHES[chat_type]
         if ChatType.DCR_CHAT == chat_type:
             from pm4py.objects.dcr.importer import importer as dcr_importer
             dcr_graph = dcr_importer.deserialize(graph_xml, variant=dcr_importer.DCR_JS_PORTAL)
-            return approach(dcr_graph, robot_auto_limit=robot_auto_limit,user_context=user_context, use_citizen_data=use_citizen_data)
+            if metadata.use_citizen_information==False:
+                user_context = None
+            return approach(dcr_graph, robot_auto_limit=robot_auto_limit,user_context=user_context, use_trace_data=metadata.use_trace_data)
         else:
             return approach()
 
@@ -87,14 +91,13 @@ class ChatController:
             assert request.chat_type is not None
             graph_xml = request.graph_xml if isinstance(request, DcrChatRequest) else None
             robot_auto_limit = request.robot_auto_limit if isinstance(request, DcrChatRequest) else None
-            user_context = request.citizen_information
-            use_citizen_data = bool(getattr(request.metadata, "use_citizen_data", False))
+            user_context = request.citizen_information if request.metadata.use_citizen_information == True else None
             chat = self._load_chat_approach(
                 request.chat_type,
                 graph_xml,
                 robot_auto_limit,
                 user_context,
-                use_citizen_data
+                request.metadata
             )
 
         response = await chat.run(request)

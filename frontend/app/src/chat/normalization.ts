@@ -27,6 +27,7 @@ export interface DcrToolEvidence extends NormalizedEvidence {
   activityId: string;
   historyIndex: number;
   toolCall: string;
+  trusted: boolean;
   text: string;
 }
 
@@ -200,6 +201,7 @@ export function extractDcrToolEvidence(
       activityId: activity.id,
       historyIndex,
       toolCall: activity.toolCall,
+      trusted: activity.trusted,
       text,
       supportingContent: [{
         id: `dcr-support-${historyIndex}-${activity.id}`,

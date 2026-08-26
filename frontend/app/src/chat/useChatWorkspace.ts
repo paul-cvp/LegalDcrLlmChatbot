@@ -53,6 +53,8 @@ export const DEFAULT_CHAT_SETTINGS: ChatSettings = {
   dcrRole: "Citizen",
   robotAutoExecutionsPerActivity: DEFAULT_ROBOT_AUTO_EXECUTIONS_PER_ACTIVITY,
   activityRepetitions: DEFAULT_ACTIVITY_REPETITIONS,
+  useChatHistory: true,
+  useChatData: true,
   useCitizenInformation: false,
   searchIndex: "All",
   suggestFollowupQuestions: true,
@@ -738,6 +740,8 @@ function requestOptions(
       ? citizenInformation
       : undefined,
     useCitizenInformation: settings.useCitizenInformation,
+    useChatHistory: settings.useChatHistory,
+    useChatData: settings.useChatData,
     signal,
   };
 }
@@ -766,7 +770,11 @@ function applyDcrToolEvidence(
       supportingContent: evidence.supportingContent,
       citations: evidence.citations,
     };
-    nextMessages[index] = { ...message, ...update };
+    nextMessages[index] = {
+      ...message,
+      ...update,
+      toolTrusted: evidence.trusted,
+    };
     enrichment[message.id] = update;
   }
 

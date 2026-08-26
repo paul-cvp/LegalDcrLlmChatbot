@@ -8,13 +8,15 @@ from concurrent.futures import ThreadPoolExecutor
 
 from pm4py.objects.dcr.ocdcr.obj import DcrGraph, DcrElement, DcrParentElement, DcrNesting, DcrSubprocess, DcrSubgraph, DcrSpawnContainer, DcrActivity, DcrRelation, DcrEffect, DcrSpawn, DcrConstraint, RelationType, DcrExpression, DcrComputation, DcrExecution
 from tools.tool_call import ToolCall
+from object.domain import ChatHistoryEntry
 
 
 class DcrSemantics:
 
-    def __init__(self,user_context:str|None=None, use_citizen_data:bool = False) -> None:
+    def __init__(self, user_context:str|None=None, use_trace_data:bool = True, chat_history:list[ChatHistoryEntry]|None = None) -> None:
         self.uc = user_context
-        self.use_citizen_data = use_citizen_data
+        self.use_trace_data = use_trace_data
+        self.chat_history = chat_history
 
     def getRelations(self, element: DcrElement, graph: DcrGraph, yields: str=None) -> tuple[Set[DcrRelation], Set[DcrRelation]]:
         incoming = set()
@@ -78,12 +80,8 @@ class DcrSemantics:
         self, graph: DcrGraph, role: str = None
     ) -> Set[DcrActivity]:
         """Return activities enabled for the supplied actor role."""
-        return {
-            element
-            for element in graph.elements
-            if isinstance(element, DcrActivity)
-            and self.isEnabled(element, graph, role)
-        }
+        return {element for element in graph.elements if isinstance(element, DcrActivity)  and self.isEnabled(element, graph, role)}
+        # return {element for element in graph.elements if type(element) is DcrActivity  and self.isEnabled(element, graph, role)}
     
     def constraintPasses(self, source: DcrElement, target: DcrElement, constraint: DcrConstraint, graph: DcrGraph) -> bool:
         if isinstance(source, DcrNesting):
@@ -171,30 +169,40 @@ class DcrSemantics:
 
 
     def invoke_tool(self, element: DcrActivity, graph: DcrGraph, summarizes_graph: bool = False):
-        """Call a persisted tool with arguments matching its registered type."""
+        """
+        Call a persisted tool with arguments matching its registered type.
+        The execution logic of tool calls is based on:
+            - trusted: true or false (technically this is mostly about who gets to see the results)  
+            - with or without citizen data (the data from the dcr executions a.k.a. the trace)
+            - with or without the user context (personal data related to the user and relevant for the case)
+        """
         tool = element.tool_call
+        process_info = {"Process title": graph.title, "Process description": graph.description}
         summarizes_graph = summarizes_graph or ToolCall.from_callable(tool) is ToolCall.SUMMARIZE_CASE_HISTORY
-        user_data = []
+        graph_execution_trace = []
         for execution in graph.executions:
             activity = graph.getActivity(execution.activityID)
             item = {
                 "label": activity.label,
                 "timestamp": str(execution.time),
             }
+            if self.use_trace_data:
+                item["data"] = activity.data
             if summarizes_graph:
                 item["id"] = execution.activityID
-            if self.use_citizen_data:
-                item["data"] = activity.data
-            user_data.append(item)
+            graph_execution_trace.append(item)
 
         kwargs = {}
-        if summarizes_graph or self.use_citizen_data:
-            kwargs["user_data"] = user_data
-        if self.use_citizen_data:
-            kwargs["user_info"] = self.uc
-        argument = graph if summarizes_graph else element.description
-        print(self.use_citizen_data, kwargs)
-        return tool(argument, **kwargs)
+        kwargs["use_data"] = self.use_trace_data
+        kwargs["graph_execution_trace"] = graph_execution_trace
+        kwargs["user_info"] = self.uc
+        #TODO in the futue use trusted and the active role to see if the tool call can use that particular chat history and trace data
+        kwargs["chat_history"] = self.chat_history
+        if summarizes_graph:
+            kwargs["graph"] = graph
+        argument = element.description
+        print("invoke_tool", self.use_trace_data, kwargs)
+        return tool(argument, process_info, **kwargs)
     
     def evaluateComputation(self, computation: DcrComputation, graph: DcrGraph, source: DcrElement=None, target: DcrElement=None) -> any:
         # Compile a temporary expression so retained XML guard tokens stay intact. graph is never empty

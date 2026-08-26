@@ -18,6 +18,8 @@ const settings: ChatSettings = {
   dcrRole: "Citizen",
   robotAutoExecutionsPerActivity: DEFAULT_ROBOT_AUTO_EXECUTIONS_PER_ACTIVITY,
   activityRepetitions: DEFAULT_ACTIVITY_REPETITIONS,
+  useChatHistory: true,
+  useChatData: true,
   useCitizenInformation: false,
   searchIndex: "All",
   suggestFollowupQuestions: true,
@@ -142,6 +144,8 @@ describe("ChatApp", () => {
     expect(field("DCR Role")?.disabled).toBe(false);
     expect(field("Automatic Robot executions per activity")?.disabled).toBe(false);
     expect(field("Repeat executed activities")?.disabled).toBe(false);
+    expect((field("Use chat history") as HTMLInputElement)?.checked).toBe(true);
+    expect((field("Use chat data") as HTMLInputElement)?.checked).toBe(true);
     expect(field("Use Citizen Information")?.disabled).toBe(false);
     expect(field("Search index")?.disabled).toBe(true);
     expect(field("Suggest follow-up statements")?.disabled).toBe(true);
@@ -152,6 +156,8 @@ describe("ChatApp", () => {
     expect(field("DCR Role")?.disabled).toBe(true);
     expect(field("Automatic Robot executions per activity")?.disabled).toBe(true);
     expect(field("Repeat executed activities")?.disabled).toBe(true);
+    expect(field("Use chat history")?.disabled).toBe(false);
+    expect(field("Use chat data")?.disabled).toBe(true);
     expect(field("Use Citizen Information")?.disabled).toBe(false);
     expect(field("Search index")?.disabled).toBe(false);
     expect(field("Suggest follow-up statements")?.disabled).toBe(false);
@@ -174,6 +180,24 @@ describe("ChatApp", () => {
     expect(onSettingsChange).toHaveBeenCalledWith({
       ...settings,
       useCitizenInformation: true,
+    });
+  });
+
+  it("updates chat history and chat data settings", () => {
+    const onSettingsChange = vi.fn();
+    render(<ChatApp {...props} onSettingsChange={onSettingsChange} />);
+    act(() => button("Settings")?.click());
+
+    act(() => field("Use chat history")?.click());
+    expect(onSettingsChange).toHaveBeenCalledWith({
+      ...settings,
+      useChatHistory: false,
+    });
+
+    act(() => field("Use chat data")?.click());
+    expect(onSettingsChange).toHaveBeenCalledWith({
+      ...settings,
+      useChatData: false,
     });
   });
 
@@ -330,6 +354,27 @@ describe("ChatApp", () => {
     expect(container?.querySelector('[role="tabpanel"]')?.textContent)
       .toContain("No citations are available for this answer.");
     expect(onCitationSelect).not.toHaveBeenCalled();
+  });
+
+  it("shows trust-colored wrenches only on tool-call answers", () => {
+    render(
+      <ChatApp
+        {...props}
+        messages={[
+          { id: "trusted", role: "robot", content: "Trusted result", toolTrusted: true },
+          { id: "untrusted", role: "assistant", content: "Untrusted result", toolTrusted: false },
+          { id: "ordinary", role: "assistant", content: "Ordinary answer" },
+        ]}
+      />,
+    );
+
+    expect(container?.querySelectorAll(".dcrChat__toolTrust")).toHaveLength(2);
+    expect(container?.querySelector('[aria-label="Trusted tool call"]')
+      ?.classList.contains("dcrChat__toolTrust--trusted")).toBe(true);
+    expect(container?.querySelector('[aria-label="Untrusted tool call"]')
+      ?.classList.contains("dcrChat__toolTrust--untrusted")).toBe(true);
+    expect(container?.querySelectorAll(".dcrChat__message")[2]
+      ?.querySelector(".dcrChat__toolTrust")).toBeNull();
   });
 
   it("renders interpreted values beneath the original user answer", () => {

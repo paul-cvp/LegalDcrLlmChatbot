@@ -25,6 +25,7 @@ describe("ChatApiClient", () => {
         search_indexes: ["find_relevant_laws", "find_similar_cases"],
         generate_followups: true,
         use_citizen_data: true,
+        use_chat_history: true,
       },
     },
     {
@@ -92,6 +93,7 @@ describe("ChatApiClient", () => {
         search_indexes: [],
         generate_followups: false,
         use_citizen_data: false,
+        use_chat_history: true,
       },
     }).catch((reason: unknown) => reason);
 

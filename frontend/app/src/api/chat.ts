@@ -8,7 +8,11 @@ export type ChatType = (typeof CHAT_TYPE)[keyof typeof CHAT_TYPE];
 export type ChatInput = string | number | boolean;
 export type RagSearchIndex = "find_relevant_laws" | "find_similar_cases";
 
-export interface RagChatMetadata {
+export interface ChatMetadata {
+  use_chat_history: boolean;
+}
+
+export interface RagChatMetadata extends ChatMetadata {
   search_indexes: RagSearchIndex[];
   generate_followups: boolean;
   use_citizen_data: boolean;
@@ -39,7 +43,8 @@ export interface RagChatStartRequest {
   citizen_information?: string;
 }
 
-export interface DcrChatMetadata {
+export interface DcrChatMetadata extends ChatMetadata {
+  use_trace_data: boolean;
   use_citizen_data: boolean;
 }
 

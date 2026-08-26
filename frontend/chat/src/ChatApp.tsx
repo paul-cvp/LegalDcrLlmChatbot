@@ -243,6 +243,17 @@ export function ChatApp({
                       ✎
                     </button>
                   )}
+                  {message.toolTrusted !== undefined && (
+                    <span
+                      className={`dcrChat__toolTrust dcrChat__toolTrust--${message.toolTrusted ? "trusted" : "untrusted"}`}
+                      aria-label={message.toolTrusted ? "Trusted tool call" : "Untrusted tool call"}
+                      title={message.toolTrusted ? "Trusted tool call" : "Untrusted tool call"}
+                    >
+                      <svg aria-hidden="true" viewBox="0 0 24 24">
+                        <path d="M22.7 19.3 13.6 10.2a6 6 0 0 0-7.8-7.8l3.5 3.5-3.4 3.4-3.5-3.5a6 6 0 0 0 7.8 7.8l9.1 9.1a1 1 0 0 0 1.4 0l2-2a1 1 0 0 0 0-1.4Z" />
+                      </svg>
+                    </span>
+                  )}
                   {message.createdAt && <time dateTime={message.createdAt}>{formatDate(message.createdAt)}</time>}
                 </div>
                 {editingMessageId === message.id ? (
@@ -486,6 +497,8 @@ export function ChatApp({
                 onDcrRoleChange={(value) => void updateSetting("dcrRole", value)}
                 onRobotAutoExecutionsChange={(value) => void updateSetting("robotAutoExecutionsPerActivity", value)}
                 onActivityRepetitionsChange={(value) => void updateSetting("activityRepetitions", value)}
+                onChatHistoryChange={(value) => void updateSetting("useChatHistory", value)}
+                onChatDataChange={(value) => void updateSetting("useChatData", value)}
                 onCitizenInformationChange={(value) => void updateSetting("useCitizenInformation", value)}
                 onSearchIndexChange={(value) => void updateSetting("searchIndex", value)}
                 onFollowupsChange={(value) => void updateSetting("suggestFollowupQuestions", value)}
@@ -785,6 +798,8 @@ interface SettingsProps {
   onDcrRoleChange: (value: DcrRole) => void;
   onRobotAutoExecutionsChange: (value: number) => void;
   onActivityRepetitionsChange: (value: number) => void;
+  onChatHistoryChange: (value: boolean) => void;
+  onChatDataChange: (value: boolean) => void;
   onCitizenInformationChange: (value: boolean) => void;
   onSearchIndexChange: (value: SearchIndex) => void;
   onFollowupsChange: (value: boolean) => void;
@@ -798,6 +813,8 @@ function Settings({
   onDcrRoleChange,
   onRobotAutoExecutionsChange,
   onActivityRepetitionsChange,
+  onChatHistoryChange,
+  onChatDataChange,
   onCitizenInformationChange,
   onSearchIndexChange,
   onFollowupsChange,
@@ -859,6 +876,27 @@ function Settings({
             ? "Activity repetition settings apply only to DCR chats."
             : "Use -1 for unlimited repetitions, 0 for no repetitions, or a positive number for the allowed repetitions."}
         </small>
+      </label>
+
+      <label className="dcrChat__checkbox">
+        <input
+          type="checkbox"
+          checked={value.useChatHistory}
+          disabled={busy}
+          onChange={(event) => onChatHistoryChange(event.target.checked)}
+        />
+        <span>Use chat history</span>
+      </label>
+
+      <label className="dcrChat__checkbox">
+        <input
+          type="checkbox"
+          checked={value.useChatData}
+          disabled={isRag || busy}
+          onChange={(event) => onChatDataChange(event.target.checked)}
+        />
+        <span>Use chat data</span>
+        {isRag && <small>Chat data applies only to DCR chats.</small>}
       </label>
 
       <label className="dcrChat__checkbox">

@@ -437,7 +437,7 @@ ComputationEditor.prototype.render = function() {
   var self = this;
   this.container.innerHTML = '';
   if (!this.computation.length) {
-    this.container.innerHTML = '<div style="font-size:11px;color:#777">No computation tokens.</div>';
+    this.container.innerHTML = '<div style="font-size:11px;color:#777">No computations.</div>';
   }
   this.computation.forEach(function(token, index) {
     self.container.appendChild(self._row(token, index));
@@ -627,7 +627,7 @@ GuardsAndTimeProvider.prototype.openMetadataPanel = function(element) {
     '<div style="margin-bottom:12px">' +
       '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px">' +
         '<label style="font-weight:600">Computation</label>' +
-        '<button id="_metadata_add_token" type="button" style="padding:4px 9px;border:1px solid #aaa;border-radius:4px;background:white;cursor:pointer">Add token</button>' +
+        '<button id="_metadata_add_token" type="button" style="padding:4px 9px;border:1px solid #aaa;border-radius:4px;background:white;cursor:pointer">Add computation</button>' +
       '</div>' +
       '<div id="_metadata_computation_rows" style="display:flex;flex-direction:column;gap:6px;max-height:260px;overflow:auto"></div>' +
     '</div>' +
