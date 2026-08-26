@@ -24,3 +24,14 @@ def test_dcr_request_parses_dcr_metadata():
 
     assert isinstance(request.metadata, DcrChatMetadata)
     assert request.metadata.use_trace_data is False
+    assert request.execute_only_pending_robot_activities is True
+
+
+def test_dcr_request_parses_disabled_pending_only_robot_execution():
+    request = DcrChatRequest(
+        text="",
+        chat_type=1,
+        execute_only_pending_robot_activities=False,
+    )
+
+    assert request.execute_only_pending_robot_activities is False

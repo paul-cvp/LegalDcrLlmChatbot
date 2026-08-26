@@ -43,6 +43,7 @@ function session(id: string, updatedAt: number): ChatSessionRecord {
     updatedAt,
     selectedRole: "Citizen",
     robotAutoExecutionsPerActivity: 1,
+    executeOnlyPendingRobotActivities: true,
     activityRepetitions: 0,
     graphXml: "<graph />",
     pendingActivityId: "activity",

@@ -64,6 +64,7 @@ export interface ChatSessionSummary {
 export interface ChatSettings {
   dcrRole: DcrRole;
   robotAutoExecutionsPerActivity: number;
+  executeOnlyPendingRobotActivities: boolean;
   activityRepetitions: number;
   useChatHistory: boolean;
   useChatData: boolean;

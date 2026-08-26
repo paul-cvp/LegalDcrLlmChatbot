@@ -10,6 +10,7 @@ import {
   type ChatWorkspace,
   useChatWorkspace,
 } from "./useChatWorkspace";
+import type { ChatSessionRecord } from "./models";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean })
   .IS_REACT_ACT_ENVIRONMENT = true;
@@ -134,6 +135,7 @@ describe("useChatWorkspace", () => {
     await act(async () => workspace.current.selectCandidate(candidate!));
     expect(requests[1]).toMatchObject({
       robot_auto_limit: 1,
+      execute_only_pending_robot_activities: true,
       activity_repeat_limit: 0,
       citizen_information: "Cached citizen profile",
       metadata: {
@@ -160,6 +162,7 @@ describe("useChatWorkspace", () => {
       act_id: "robot",
       dcr_role: "Case worker",
       robot_auto_limit: 1,
+      execute_only_pending_robot_activities: true,
       activity_repeat_limit: 0,
       citizen_information: "Cached citizen profile",
       metadata: {
@@ -203,6 +206,7 @@ describe("useChatWorkspace", () => {
       graph_xml: GRAPH_XML,
       dcr_role: "Citizen",
       robot_auto_limit: 1,
+      execute_only_pending_robot_activities: true,
       activity_repeat_limit: 0,
       metadata: {
         use_chat_history: true,
@@ -212,6 +216,40 @@ describe("useChatWorkspace", () => {
     });
     expect(workspace.current.messages).toHaveLength(1);
     expect(workspace.current.messages[0]?.role).toBe("assistant");
+  });
+
+  it("applies pending-only Robot setting changes to an active DCR session", async () => {
+    const requests: Record<string, unknown>[] = [];
+    const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).endsWith("/history")) return Response.json([]);
+      requests.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+      return Response.json({
+        text: "Waiting for work",
+        session_id: "direct-session",
+        graph_xml: GRAPH_XML,
+        act_id: null,
+        dcr_role: null,
+      });
+    });
+    const controller = createController(fetcher);
+    const workspace = await renderWorkspace(
+      { mode: "dcr", graphName: "Support", graphXml: GRAPH_XML },
+      controller,
+      true,
+    );
+
+    await act(async () => workspace.current.updateSettings({
+      ...workspace.current.settings,
+      executeOnlyPendingRobotActivities: false,
+    }));
+
+    expect(requests).toHaveLength(2);
+    expect(requests[1]).toMatchObject({
+      session_id: "direct-session",
+      execute_only_pending_robot_activities: false,
+    });
+    expect((await controller.getSession("direct-session"))
+      ?.executeOnlyPendingRobotActivities).toBe(false);
   });
 
   it("sends widget answers as native values without an interpreted message", async () => {
@@ -387,6 +425,7 @@ describe("useChatWorkspace", () => {
       session_id: "role-session",
       dcr_role: "Case worker",
       robot_auto_limit: 1,
+      execute_only_pending_robot_activities: true,
       activity_repeat_limit: 0,
       metadata: {
         use_chat_history: true,
@@ -448,10 +487,11 @@ describe("useChatWorkspace", () => {
       robot_auto_limit: 1,
     });
     expect(workspace.current.messages[0]).toMatchObject({
-      role: "robot",
+      role: "assistant",
+      dcrRole: "Robot",
       content: expect.stringContaining("executed with result"),
     });
-    expect(workspace.current.messages.filter(({ role }) => role === "robot"))
+    expect(workspace.current.messages.filter(({ dcrRole }) => dcrRole === "Robot"))
       .toHaveLength(2);
     expect(workspace.current.notice).toBe(
       "2 Robot activities were executed automatically: “Check law”, “Notify system”.",
@@ -497,6 +537,7 @@ describe("useChatWorkspace", () => {
     await act(async () => workspace.current.updateSettings({
       ...workspace.current.settings,
       robotAutoExecutionsPerActivity: -1,
+      executeOnlyPendingRobotActivities: false,
       activityRepetitions: 2,
     }));
     await act(async () => workspace.current.send("Find a graph"));
@@ -506,10 +547,14 @@ describe("useChatWorkspace", () => {
 
     expect((await controller.getSession("limit-session"))?.robotAutoExecutionsPerActivity)
       .toBe(-1);
+    expect(requests.at(-1)?.execute_only_pending_robot_activities).toBe(false);
+    expect((await controller.getSession("limit-session"))?.executeOnlyPendingRobotActivities)
+      .toBe(false);
     expect(requests.at(-1)?.activity_repeat_limit).toBe(2);
     expect((await controller.getSession("limit-session"))?.activityRepetitions).toBe(2);
     await act(async () => workspace.current.selectSession("limit-session"));
     expect(workspace.current.settings.robotAutoExecutionsPerActivity).toBe(-1);
+    expect(workspace.current.settings.executeOnlyPendingRobotActivities).toBe(false);
     expect(workspace.current.settings.activityRepetitions).toBe(2);
   });
 
@@ -595,6 +640,32 @@ describe("useChatWorkspace", () => {
     });
   });
 
+  it("defaults older saved sessions to pending-only Robot execution", async () => {
+    const legacy = {
+      id: "legacy-session",
+      mode: "dcr",
+      title: "Legacy",
+      updatedAt: 1,
+      selectedRole: "Citizen",
+      robotAutoExecutionsPerActivity: 1,
+      activityRepetitions: 0,
+      messages: [],
+      enrichment: {},
+      candidates: [],
+      candidateDescriptions: {},
+    } as unknown as ChatSessionRecord;
+    const repository = {
+      list: async () => [legacy],
+    } as unknown as ChatSessionRepository;
+    const controller = new ChatWorkspaceController(
+      new ChatApiClient("/api/chat", vi.fn() as typeof fetch),
+      repository,
+    );
+
+    expect((await controller.listSessions())[0]?.executeOnlyPendingRobotActivities)
+      .toBe(true);
+  });
+
   it("rebuilds every DCR tool result when restoring a session", async () => {
     const graphXml = `<dcr:definitions xmlns:dcr="http://tk/schema/dcr">
       <dcr:dcrGraph id="tools">
@@ -627,6 +698,7 @@ describe("useChatWorkspace", () => {
       updatedAt: 1,
       selectedRole: "Citizen",
       robotAutoExecutionsPerActivity: 1,
+      executeOnlyPendingRobotActivities: true,
       activityRepetitions: 0,
       graphXml,
       messages: [],
@@ -663,6 +735,7 @@ describe("useChatWorkspace", () => {
         updatedAt: 1,
         selectedRole: "Citizen",
         robotAutoExecutionsPerActivity: 1,
+        executeOnlyPendingRobotActivities: true,
         activityRepetitions: 0,
         messages: [],
         enrichment: {},
@@ -692,6 +765,7 @@ describe("useChatWorkspace", () => {
       updatedAt: 1,
       selectedRole: "Citizen",
       robotAutoExecutionsPerActivity: 1,
+      executeOnlyPendingRobotActivities: true,
       activityRepetitions: 0,
       messages: [],
       enrichment: {},

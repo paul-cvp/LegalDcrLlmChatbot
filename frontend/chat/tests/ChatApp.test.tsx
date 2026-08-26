@@ -17,6 +17,7 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 const settings: ChatSettings = {
   dcrRole: "Citizen",
   robotAutoExecutionsPerActivity: DEFAULT_ROBOT_AUTO_EXECUTIONS_PER_ACTIVITY,
+  executeOnlyPendingRobotActivities: true,
   activityRepetitions: DEFAULT_ACTIVITY_REPETITIONS,
   useChatHistory: true,
   useChatData: true,
@@ -222,6 +223,14 @@ describe("ChatApp", () => {
       ...settings,
       robotAutoExecutionsPerActivity: 0,
     });
+
+    const pendingOnly = field("Execute only pending Robot activities") as HTMLInputElement;
+    expect(pendingOnly.checked).toBe(true);
+    act(() => pendingOnly.click());
+    expect(onSettingsChange).toHaveBeenLastCalledWith({
+      ...settings,
+      executeOnlyPendingRobotActivities: false,
+    });
   });
 
   it("configures how many times executed activities may repeat", () => {
@@ -375,6 +384,24 @@ describe("ChatApp", () => {
       ?.classList.contains("dcrChat__toolTrust--untrusted")).toBe(true);
     expect(container?.querySelectorAll(".dcrChat__message")[2]
       ?.querySelector(".dcrChat__toolTrust")).toBeNull();
+  });
+
+  it("renders Robot executions as Assistant with the Robot DCR role", () => {
+    render(
+      <ChatApp
+        {...props}
+        messages={[{
+          id: "robot-execution",
+          role: "assistant",
+          dcrRole: "Robot",
+          content: "Robot result",
+        }]}
+      />,
+    );
+
+    const heading = container?.querySelector(".dcrChat__messageHeading");
+    expect(heading?.querySelector("strong")?.textContent).toBe("Assistant");
+    expect(heading?.querySelector("span")?.textContent).toBe("Robot");
   });
 
   it("renders interpreted values beneath the original user answer", () => {

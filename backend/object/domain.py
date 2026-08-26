@@ -103,6 +103,7 @@ class DcrChatRequest(ChatSessionRequest):
     dcr_role: str | None = None
     # RobotExecutionPolicy validates the range for both API and environment values.
     robot_auto_limit: int | None = None
+    execute_only_pending_robot_activities: bool = True
     activity_repeat_limit: int | None = Field(default=None, ge=-1)
 
 

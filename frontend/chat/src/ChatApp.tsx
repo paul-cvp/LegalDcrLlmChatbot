@@ -496,6 +496,7 @@ export function ChatApp({
                 hasCachedCitizenInformation={hasCachedCitizenInformation}
                 onDcrRoleChange={(value) => void updateSetting("dcrRole", value)}
                 onRobotAutoExecutionsChange={(value) => void updateSetting("robotAutoExecutionsPerActivity", value)}
+                onOnlyPendingRobotActivitiesChange={(value) => void updateSetting("executeOnlyPendingRobotActivities", value)}
                 onActivityRepetitionsChange={(value) => void updateSetting("activityRepetitions", value)}
                 onChatHistoryChange={(value) => void updateSetting("useChatHistory", value)}
                 onChatDataChange={(value) => void updateSetting("useChatData", value)}
@@ -797,6 +798,7 @@ interface SettingsProps {
   hasCachedCitizenInformation: boolean;
   onDcrRoleChange: (value: DcrRole) => void;
   onRobotAutoExecutionsChange: (value: number) => void;
+  onOnlyPendingRobotActivitiesChange: (value: boolean) => void;
   onActivityRepetitionsChange: (value: number) => void;
   onChatHistoryChange: (value: boolean) => void;
   onChatDataChange: (value: boolean) => void;
@@ -812,6 +814,7 @@ function Settings({
   hasCachedCitizenInformation,
   onDcrRoleChange,
   onRobotAutoExecutionsChange,
+  onOnlyPendingRobotActivitiesChange,
   onActivityRepetitionsChange,
   onChatHistoryChange,
   onChatDataChange,
@@ -854,6 +857,17 @@ function Settings({
             ? "Robot execution settings apply only to DCR chats."
             : "Use -1 for unlimited automatic executions, 0 to always require Caseworker confirmation, or a positive limit for each Robot activity."}
         </small>
+      </label>
+
+      <label className="dcrChat__checkbox">
+        <input
+          type="checkbox"
+          checked={value.executeOnlyPendingRobotActivities}
+          disabled={isRag || busy}
+          onChange={(event) => onOnlyPendingRobotActivitiesChange(event.target.checked)}
+        />
+        <span>Execute only pending Robot activities</span>
+        {isRag && <small>Robot execution settings apply only to DCR chats.</small>}
       </label>
 
       <label>

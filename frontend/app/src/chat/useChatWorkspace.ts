@@ -52,6 +52,7 @@ type ActiveSession = Omit<ChatSessionRecord, "id"> & { id?: string };
 export const DEFAULT_CHAT_SETTINGS: ChatSettings = {
   dcrRole: "Citizen",
   robotAutoExecutionsPerActivity: DEFAULT_ROBOT_AUTO_EXECUTIONS_PER_ACTIVITY,
+  executeOnlyPendingRobotActivities: true,
   activityRepetitions: DEFAULT_ACTIVITY_REPETITIONS,
   useChatHistory: true,
   useChatData: true,
@@ -306,6 +307,7 @@ export function useChatWorkspace(
         draft.graphXml!,
         graphRole,
         draft.robotAutoExecutionsPerActivity,
+        draft.executeOnlyPendingRobotActivities,
         draft.activityRepetitions,
         requestOptions(settings, citizenInformation, signal),
       );
@@ -388,6 +390,7 @@ export function useChatWorkspace(
           value,
           role,
           current.robotAutoExecutionsPerActivity,
+          current.executeOnlyPendingRobotActivities,
           current.activityRepetitions,
           current.pendingActivityId,
           requestOptions(settings, citizenInformation, signal),
@@ -432,6 +435,7 @@ export function useChatWorkspace(
         checkpoint.graphXml,
         graphRole,
         current.robotAutoExecutionsPerActivity,
+        current.executeOnlyPendingRobotActivities,
         current.activityRepetitions,
         requestOptions(settings, citizenInformation, signal),
       );
@@ -476,6 +480,7 @@ export function useChatWorkspace(
           value,
           graphRole,
           current.robotAutoExecutionsPerActivity,
+          current.executeOnlyPendingRobotActivities,
           current.activityRepetitions,
           restored.pendingActivityId,
           requestOptions(settings, citizenInformation, signal),
@@ -520,6 +525,7 @@ export function useChatWorkspace(
         candidate.source,
         resolveGraphDcrRole(current.selectedRole, current.graphXml),
         current.robotAutoExecutionsPerActivity,
+        current.executeOnlyPendingRobotActivities,
         current.activityRepetitions,
         requestOptions(settings, citizenInformation, signal),
       );
@@ -532,15 +538,20 @@ export function useChatWorkspace(
     const roleChanged = nextSettings.dcrRole !== previous.selectedRole;
     const robotLimitChanged = nextSettings.robotAutoExecutionsPerActivity
       !== previous.robotAutoExecutionsPerActivity;
+    const onlyPendingChanged = nextSettings.executeOnlyPendingRobotActivities
+      !== previous.executeOnlyPendingRobotActivities;
     const activityLimitChanged = nextSettings.activityRepetitions
       !== previous.activityRepetitions;
     setSettings(nextSettings);
-    if (previous.mode === "rag" || (!roleChanged && !robotLimitChanged && !activityLimitChanged)) return;
+    if (previous.mode === "rag" || (
+      !roleChanged && !robotLimitChanged && !onlyPendingChanged && !activityLimitChanged
+    )) return;
 
     const current: ActiveSession = {
       ...discardUncommitted(previous),
       selectedRole: nextSettings.dcrRole,
       robotAutoExecutionsPerActivity: nextSettings.robotAutoExecutionsPerActivity,
+      executeOnlyPendingRobotActivities: nextSettings.executeOnlyPendingRobotActivities,
       activityRepetitions: nextSettings.activityRepetitions,
       updatedAt: Date.now(),
     };
@@ -548,7 +559,9 @@ export function useChatWorkspace(
     await persist(current);
 
     if (!current.id || !current.graphXml) return;
-    if (!roleChanged && (!activityLimitChanged || current.pendingActivityId)) return;
+    if (!roleChanged && (
+      (!activityLimitChanged && !onlyPendingChanged) || current.pendingActivityId
+    )) return;
     if (roleChanged && isRobotActivity(current.graphXml, current.pendingActivityId)) return;
     if (isComplete(current.messages)) return;
 
@@ -558,6 +571,7 @@ export function useChatWorkspace(
         "",
         resolveGraphDcrRole(current.selectedRole, current.graphXml),
         current.robotAutoExecutionsPerActivity,
+        current.executeOnlyPendingRobotActivities,
         current.activityRepetitions,
         undefined,
         requestOptions(nextSettings, citizenInformation, signal),
@@ -577,6 +591,7 @@ export function useChatWorkspace(
         : { mode: source.mode },
       source.selectedRole,
       source.robotAutoExecutionsPerActivity,
+      source.executeOnlyPendingRobotActivities,
       source.activityRepetitions,
     );
     historyRef.current = [];
@@ -620,6 +635,7 @@ export function useChatWorkspace(
           ...current,
           dcrRole: record.selectedRole,
           robotAutoExecutionsPerActivity: record.robotAutoExecutionsPerActivity,
+          executeOnlyPendingRobotActivities: record.executeOnlyPendingRobotActivities,
           activityRepetitions: record.activityRepetitions,
         }));
         setSelectedCitation(undefined);
@@ -710,6 +726,7 @@ function createDraftSession(
   launch: ChatLaunchConfig,
   selectedRole: ChatSessionRecord["selectedRole"],
   robotAutoExecutionsPerActivity = DEFAULT_ROBOT_AUTO_EXECUTIONS_PER_ACTIVITY,
+  executeOnlyPendingRobotActivities = true,
   activityRepetitions = DEFAULT_ACTIVITY_REPETITIONS,
 ): ActiveSession {
   return {
@@ -720,6 +737,7 @@ function createDraftSession(
     updatedAt: Date.now(),
     selectedRole,
     robotAutoExecutionsPerActivity,
+    executeOnlyPendingRobotActivities,
     activityRepetitions,
     graphName: launch.mode === "dcr" ? launch.graphName : undefined,
     graphXml: launch.mode === "dcr" ? launch.graphXml : undefined,
@@ -856,6 +874,7 @@ function draftAfterExpiry(session: ActiveSession): ActiveSession {
     updatedAt: Date.now(),
     selectedRole: session.selectedRole,
     robotAutoExecutionsPerActivity: session.robotAutoExecutionsPerActivity,
+    executeOnlyPendingRobotActivities: session.executeOnlyPendingRobotActivities,
     activityRepetitions: session.activityRepetitions,
     graphName: isDirect ? session.graphName : undefined,
     graphXml: isDirect ? session.graphXml : undefined,

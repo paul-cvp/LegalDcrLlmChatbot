@@ -147,9 +147,9 @@ def test_robot_policy_rejects_invalid_environment(monkeypatch, configured):
 
 
 def test_automatic_counts_are_independent_per_activity_and_session():
-    first, second = robot("first"), robot("second")
+    first, second = robot("first", pending=True), robot("second", pending=True)
     one = chat(first, second, limit=1)
-    two = chat(robot("first"), limit=1)
+    two = chat(robot("first", pending=True), limit=1)
 
     one._robot_policy.record_automatic_execution(first)
 
@@ -174,8 +174,52 @@ def test_zero_asks_immediately_and_passes_details_to_question_generator():
     assert not instance.trace
 
 
+def test_default_policy_asks_permission_for_non_pending_robot():
+    activity = robot()
+    instance = chat(activity)
+
+    response = asyncio.run(instance.run(DcrChatRequest(
+        text="",
+        chat_type=1,
+        dcr_role="Citizen",
+    )))
+
+    assert response.act_id == activity.ID
+    assert response.text == "May the Robot execute Robot robot?"
+    assert not instance.trace
+
+
+def test_pending_only_policy_can_be_disabled():
+    activity = robot()
+    instance = chat(activity)
+
+    asyncio.run(instance.run(DcrChatRequest(
+        text="",
+        chat_type=1,
+        dcr_role="Citizen",
+        execute_only_pending_robot_activities=False,
+    )))
+
+    assert len(instance.trace) == 1
+    assert instance._robot_policy.automatic_counts[activity.ID] == 1
+
+
+def test_pending_robot_still_obeys_automatic_limit():
+    activity = robot(pending=True)
+    instance = chat(activity, limit=0)
+
+    response = asyncio.run(instance.run(DcrChatRequest(
+        text="",
+        chat_type=1,
+        dcr_role="Citizen",
+    )))
+
+    assert response.act_id == activity.ID
+    assert not instance.trace
+
+
 def test_default_executes_once_then_requests_permission_for_changed_data():
-    activity = robot(data="first")
+    activity = robot(data="first", pending=True)
     instance = chat(activity)
 
     assert asyncio.run(instance.present_question_to_user("Citizen")) is None
@@ -189,7 +233,7 @@ def test_default_executes_once_then_requests_permission_for_changed_data():
 
 @pytest.mark.parametrize("role", ["Citizen", "Caseworker"])
 def test_automatic_execution_reports_metadata_and_graph_update_for_any_role(role):
-    activity = robot()
+    activity = robot(pending=True)
     instance = chat(activity)
 
     response = asyncio.run(
@@ -214,7 +258,7 @@ def test_automatic_execution_reports_metadata_and_graph_update_for_any_role(role
 
 
 def test_all_enabled_robot_activities_report_their_automatic_execution():
-    instance = chat(robot("first"), robot("second"))
+    instance = chat(robot("first", pending=True), robot("second", pending=True))
 
     response = asyncio.run(
         instance.run(
@@ -230,7 +274,7 @@ def test_all_enabled_robot_activities_report_their_automatic_execution():
 
 
 def test_runtime_limit_update_preserves_automatic_execution_count():
-    activity = robot(data="first")
+    activity = robot(data="first", pending=True)
     instance = chat(activity, limit=1)
     asyncio.run(instance.present_question_to_user("Citizen"))
 
@@ -242,6 +286,7 @@ def test_runtime_limit_update_preserves_automatic_execution_count():
                 session_id="00000000-0000-0000-0000-000000000001",
                 dcr_role="Citizen",
                 robot_auto_limit=2,
+                execute_only_pending_robot_activities=False,
             )
         )
     )
@@ -253,6 +298,7 @@ def test_runtime_limit_update_preserves_automatic_execution_count():
                 session_id="00000000-0000-0000-0000-000000000001",
                 dcr_role="Citizen",
                 robot_auto_limit=2,
+                execute_only_pending_robot_activities=False,
             )
         )
     )
@@ -263,8 +309,9 @@ def test_runtime_limit_update_preserves_automatic_execution_count():
 
 
 def test_unlimited_policy_keeps_automatic_execution_for_new_occurrences():
-    activity = robot(data="first")
+    activity = robot(data="first", pending=True)
     instance = chat(activity, limit=-1)
+    instance._robot_policy.set_only_pending(False)
 
     asyncio.run(instance.present_question_to_user("Citizen"))
     activity.data = "second"

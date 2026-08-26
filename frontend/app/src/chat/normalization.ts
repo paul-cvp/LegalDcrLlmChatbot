@@ -317,7 +317,6 @@ function interpretedValue(content: string): string {
 }
 
 function historyRole(entry: ChatHistoryEntry): StoredChatMessage["role"] {
-  if (canonicalizeDcrRole(entry.dcr_role) === "Robot") return "robot";
   if (entry.chat_role === "user") return "user";
   if (entry.chat_role === "system") return "system";
   return "assistant";

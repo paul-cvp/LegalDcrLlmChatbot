@@ -15,6 +15,7 @@ describe("ChatApiClient", () => {
       graph_xml: "<graph />",
       dcr_role: "Citizen",
       robot_auto_limit: 1,
+      execute_only_pending_robot_activities: true,
       activity_repeat_limit: 0,
     },
     { text: "find a process", chat_type: CHAT_TYPE.DCR_CONTROLLER_CHAT },

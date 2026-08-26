@@ -73,6 +73,7 @@ export interface ChatSessionRecord {
   updatedAt: number;
   selectedRole: DcrUserRole;
   robotAutoExecutionsPerActivity: number;
+  executeOnlyPendingRobotActivities: boolean;
   activityRepetitions: number;
   graphName?: string;
   graphXml?: string;

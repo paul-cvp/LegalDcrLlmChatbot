@@ -55,6 +55,7 @@ class RobotExecutionPolicy:
 
     def __init__(self, automatic_limit: int) -> None:
         self.automatic_limit = 0
+        self.only_pending = True
         self.set_automatic_limit(automatic_limit)
         self.automatic_counts: Counter[str] = Counter()
         self.pending: RobotOccurrence | None = None
@@ -66,6 +67,9 @@ class RobotExecutionPolicy:
         if automatic_limit < -1:
             raise ValidationError(f"{ROBOT_AUTO_EXECUTIONS_ENV} must be -1 or greater.")
         self.automatic_limit = automatic_limit
+
+    def set_only_pending(self, only_pending: bool) -> None:
+        self.only_pending = only_pending
 
     @classmethod
     def from_environment(cls) -> "RobotExecutionPolicy":
@@ -98,8 +102,11 @@ class RobotExecutionPolicy:
 
     def can_execute_automatically(self, activity: DcrActivity) -> bool:
         return (
-            self.automatic_limit == -1
-            or self.automatic_counts[activity.ID] < self.automatic_limit
+            (not self.only_pending or activity.pending)
+            and (
+                self.automatic_limit == -1
+                or self.automatic_counts[activity.ID] < self.automatic_limit
+            )
         )
 
     def record_automatic_execution(self, activity: DcrActivity) -> None:
@@ -269,29 +276,30 @@ class DcrChat(ChatWithHistory):
             # msg += f"answering query '{act.description}'" if act.description else ""
             # msg += f"executed"
             # msg += f" with data '{act.data}'" if act.data else ""
-            if act.trusted == False and self.active_role == "Citizen":
-                # Untrusted tool returned data to Citizen
-                self.record_response(item=str(act.data),chat_role="assistant",dcr_role="Caseworker", metadata={
-                        "activity_id": act.ID,
-                        "approved": False})
-                msg = "Your case is underway. A Caseworker will validate the request result and get back to you!"
-                self.record_response(item=msg,chat_role="assistant",dcr_role=self.active_role, metadata={
-                        "activity_id": act.ID
-                        })
-            else:
-                self.record_response(
-                    item = str(act.data),
-                    # item=f"Robot activity {act.label} {msg}.",
-                    chat_role="assistant",
-                    dcr_role="Robot",
-                    metadata={
-                        "robot_execution": True,
-                        "automatic": automatic,
-                        "activity_id": act.ID,
-                        "activity_label": act.label,
-                        "citizen_visible": act.trusted,
-                    },
-                )
+            if act.tool_call is not None:
+                if act.trusted == False and self.active_role == "Citizen":
+                    # Untrusted tool returned data to Citizen
+                    self.record_response(item=str(act.data),chat_role="assistant",dcr_role="Caseworker", metadata={
+                            "activity_id": act.ID,
+                            "approved": False})
+                    msg = "Your case is underway. A Caseworker will validate the request result and get back to you!"
+                    self.record_response(item=msg,chat_role="assistant",dcr_role=self.active_role, metadata={
+                            "activity_id": act.ID
+                            })
+                else:
+                    self.record_response(
+                        item = str(act.data),
+                        # item=f"Robot activity {act.label} {msg}.",
+                        chat_role="assistant",
+                        dcr_role="Robot",
+                        metadata={
+                            "robot_execution": True,
+                            "automatic": automatic,
+                            "activity_id": act.ID,
+                            "activity_label": act.label,
+                            "citizen_visible": act.trusted,
+                        },
+                    )
             LOGGER.info("DCR Chat: Robot activity %s executed", act.ID)
             return True
         else:
@@ -430,6 +438,9 @@ class DcrChat(ChatWithHistory):
     
     async def run(self, request: DcrChatRequest) -> DcrChatResponse|ChatSessionResponse:
         self.active_role = request.dcr_role
+        self._robot_policy.set_only_pending(
+            request.execute_only_pending_robot_activities
+        )
         if request.robot_auto_limit is not None:
             self._robot_policy.set_automatic_limit(request.robot_auto_limit)
         if request.activity_repeat_limit is not None:

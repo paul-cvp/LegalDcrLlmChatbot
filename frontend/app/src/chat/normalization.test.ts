@@ -267,10 +267,11 @@ describe("DCR normalization", () => {
 
     expect(merged.map((message) => [message.role, message.content])).toEqual([
       ["user", "Graph description"],
-      ["robot", "Robot result"],
+      ["assistant", "Robot result"],
       ["assistant", "Next question"],
     ]);
     expect(merged[1]?.citations).toHaveLength(1);
+    expect(merged[1]?.dcrRole).toBe("Robot");
   });
 
   it("attaches interpreted history metadata to the preceding user answer", () => {
