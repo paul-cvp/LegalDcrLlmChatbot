@@ -107,7 +107,7 @@ class LLMDcrControllerChat(ChatWithHistory):
                 graph,
                 dcr_request.robot_auto_limit,
                 dcr_request.citizen_information,
-                bool(getattr(dcr_request.metadata, "use_citizen_data", True)),
+                bool(getattr(dcr_request.metadata, "use_trace_data", True)),
             )
         )
         # Carry discovery messages into the process chat's session history.
@@ -121,13 +121,13 @@ class LLMDcrControllerChat(ChatWithHistory):
         graph: DcrGraph,
         robot_auto_limit: int | None,
         citizen_information: str | None,
-        use_citizen_data: bool,
+        use_trace_data: bool,
     ) -> DcrChat:
         return DcrChat(
             graph,
             robot_auto_limit=robot_auto_limit,
             user_context=citizen_information,
-            use_citizen_data=use_citizen_data,
+            use_trace_data=use_trace_data,
         )
 
     @staticmethod

@@ -146,14 +146,15 @@ def test_controller_refreshes_candidates_then_starts_and_delegates_dcr_chat(
             *,
             robot_auto_limit=None,
             user_context=None,
-            use_citizen_data=False,
+            use_trace_data=True,
         ):
             super().__init__(
                 selected_graph,
                 robot_auto_limit,
                 user_context,
-                use_citizen_data,
+                use_trace_data,
             )
+            self.use_trace_data = use_trace_data
             created_chats.append(self)
 
     monkeypatch.setattr(llm_dcr_controller, "DcrChat", ConfiguredFakeDcrChat)
@@ -179,7 +180,7 @@ def test_controller_refreshes_candidates_then_starts_and_delegates_dcr_chat(
                 dcr_role="Citizen",
                 robot_auto_limit=0,
                 citizen_information="Citizen profile",
-                metadata={"use_citizen_data": True},
+                metadata={"use_trace_data": False},
             )
         )
     )
@@ -205,7 +206,7 @@ def test_controller_refreshes_candidates_then_starts_and_delegates_dcr_chat(
     assert len(created_chats) == 1
     assert created_chats[0].robot_auto_limit == 0
     assert created_chats[0].citizen_information == "Citizen profile"
-    assert created_chats[0].use_citizen_data is True
+    assert created_chats[0].use_trace_data is False
     assert [request.text for request in created_chats[0].requests] == [
         "second.xml",
         "answer",

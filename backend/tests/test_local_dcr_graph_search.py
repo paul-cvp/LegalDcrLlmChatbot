@@ -184,6 +184,27 @@ def test_find_relevant_dcr_graphs_delegates_to_local_search():
     assert FindRelevantDcrGraphs(FakeSearch()).find("expense", 3) == ["result"]
 
 
+def test_answer_builds_index_outside_running_event_loop(tmp_path):
+    graphs = tmp_path / "graphs"
+    graphs.mkdir()
+    (graphs / "expense.xml").write_text(
+        '<dcrGraph id="expense"><event label="expense support" /></dcrGraph>'
+    )
+
+    class FakeLlm:
+        async def complete_from_templates(self, *args, **kwargs):
+            return "answer"
+
+    answer = asyncio.run(
+        FindRelevantDcrGraphs(
+            make_search(graphs, tmp_path / "index"), FakeLlm()
+        ).answer("expense", top_k=1)
+    )
+
+    assert answer.text == "answer"
+    assert [graph.graph_id for graph in answer.graphs] == ["expense"]
+
+
 def test_search_filters_format_before_applying_limit(tmp_path):
     graphs = tmp_path / "graphs"
     index = tmp_path / "index"

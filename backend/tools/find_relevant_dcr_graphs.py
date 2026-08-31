@@ -1,3 +1,5 @@
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Literal
 
@@ -6,6 +8,12 @@ from util.localdcrgraphsearch import (
     LocalDcrGraphSearch,
     RelevantDcrGraphResult,
     get_local_dcr_graph_search,
+)
+
+
+DCR_GRAPH_SEARCH_EXECUTOR = ThreadPoolExecutor(
+    max_workers=1,
+    thread_name_prefix="dcr-graph-search",
 )
 
 
@@ -29,8 +37,6 @@ class FindRelevantDcrGraphs:
     def find(
         self,
         query: str,
-        user_context: str | None = None,
-        user_data: dict | None = None,
         top_k: int = 5,
         graph_format: Literal["xml", "json"] | None = None,
     ) -> list[RelevantDcrGraphResult]:
@@ -46,7 +52,14 @@ class FindRelevantDcrGraphs:
         user_info: str | None = None,
     ) -> RelevantDcrGraphsAnswer:
         """Describe the retrieved graphs and retain them for exact selection."""
-        graphs = self.find(query, top_k=top_k, graph_format=graph_format)
+        # Index synchronization parses files asynchronously, so run the sync search
+        # outside the server's active event loop.
+        future = DCR_GRAPH_SEARCH_EXECUTOR.submit(
+            self.find, query, top_k=top_k, graph_format=graph_format
+        )
+        while not future.done():
+            await asyncio.sleep(0.01)
+        graphs = future.result()
         text = await self._language_model.complete_from_templates(
             "relevant_dcr_graphs_answer.system.jinja2",
             "relevant_dcr_graphs_answer.user.jinja2",
