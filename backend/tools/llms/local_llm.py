@@ -126,7 +126,7 @@ class LocalLlm(BaseLlm):
             response = self._model.create_chat_completion(
                 messages=messages,
                 temperature=0.2,
-                max_tokens=512,
+                max_tokens=None,
                 response_format=response_format,
             )
         try:

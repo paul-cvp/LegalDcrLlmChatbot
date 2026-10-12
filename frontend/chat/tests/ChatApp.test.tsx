@@ -350,7 +350,8 @@ describe("ChatApp", () => {
     );
 
     const message = container?.querySelector(".dcrChat__message--assistant");
-    const actions = [...(message?.querySelectorAll("button") ?? [])];
+    expect(message?.querySelector(".dcrChat__messageHeading .dcrChat__supportButton")).not.toBeNull();
+    const actions = [...(message?.querySelectorAll(".dcrChat__messageActions button") ?? [])];
     expect(actions.map((action) => action.textContent)).toEqual([
       "Supporting Content",
       "Citation",
@@ -501,15 +502,196 @@ describe("ChatApp", () => {
     );
 
     act(() => button("✎")?.click());
-    const textarea = container?.querySelector<HTMLTextAreaElement>('[aria-label="Edit answer text"]');
-    act(() => {
-      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")
-        ?.set?.call(textarea, "No");
-      textarea?.dispatchEvent(new Event("input", { bubbles: true }));
-    });
-    await act(async () => button("Save")?.click());
+    expect(container?.querySelector('[aria-label="Edit answer text"]')).toBeNull();
+    const widget = container?.querySelector('.dcrChat__message [aria-label="Expected Boolean answer"]');
+    expect(widget).not.toBeNull();
+    const yes = button("Yes");
+    expect(yes?.disabled).toBe(true);
+    expect(yes?.getAttribute("aria-pressed")).toBe("true");
+    await act(async () => button("No")?.click());
 
     expect(onEditAnswer).toHaveBeenCalledWith("boolean-answer", false);
+    expect(container?.querySelector('.dcrChat__message [aria-label="Expected Boolean answer"]')).toBeNull();
+  });
+
+  it("rewinds Integer answers with the number widget", async () => {
+    const onEditAnswer = vi.fn().mockResolvedValue(undefined);
+    render(
+      <ChatApp
+        {...props}
+        onEditAnswer={onEditAnswer}
+        messages={[{
+          id: "integer-answer",
+          role: "user",
+          content: "3",
+          editable: true,
+          answerType: "int",
+        }]}
+      />,
+    );
+
+    act(() => button("✎")?.click());
+    const input = container?.querySelector<HTMLInputElement>(
+      '.dcrChat__message [aria-label="Expected Integer answer"] input',
+    );
+    expect(input?.value).toBe("3");
+    expect(button("Save")?.disabled).toBe(true);
+
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")
+        ?.set?.call(input, "5");
+      input?.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => button("Save")?.click());
+    expect(onEditAnswer).toHaveBeenCalledWith("integer-answer", 5);
+
+    act(() => button("✎")?.click());
+    act(() => button("Cancel")?.click());
+    expect(container?.querySelector('.dcrChat__message [aria-label="Expected Integer answer"]')).toBeNull();
+    expect(onEditAnswer).toHaveBeenCalledTimes(1);
+  });
+
+  it("moves <think> reasoning into the Supporting Content panel", () => {
+    render(
+      <ChatApp
+        {...props}
+        messages={[
+          { id: "question", role: "user", content: "Am I eligible?" },
+          {
+            id: "answer",
+            role: "assistant",
+            content: "<think>The citizen is over 18.\nSo eligible.</think>\n\nYes, you are eligible.",
+          },
+        ]}
+      />,
+    );
+
+    const message = container?.querySelector(".dcrChat__message--assistant");
+    expect(message?.querySelector(".dcrChat__markdown")?.textContent).toBe("Yes, you are eligible.");
+    expect(message?.textContent).not.toContain("over 18");
+
+    const heading = message?.querySelector(".dcrChat__messageHeading");
+    const headingButton = heading?.querySelector<HTMLButtonElement>("button");
+    expect(headingButton?.classList.contains("dcrChat__supportButton")).toBe(true);
+    expect(headingButton?.getAttribute("aria-label")).toBe("Supporting Content");
+    expect(headingButton?.querySelector("svg")).not.toBeNull();
+    expect(headingButton?.parentElement?.previousElementSibling?.textContent).toBe("Assistant");
+    expect(container?.querySelector('[aria-label="Chat controls"] .dcrChat__supportButton')).toBeNull();
+    act(() => headingButton?.click());
+
+    const panel = container?.querySelector('[role="tabpanel"]');
+    expect(panel?.querySelector("article.dcrChat__thinking h3")?.textContent).toBe("Reasoning");
+    expect(panel?.textContent).toContain("The citizen is over 18.");
+    expect(headingButton?.getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("shows the heading Supporting Content icon only on answers that have it", () => {
+    render(
+      <ChatApp
+        {...props}
+        messages={[
+          { id: "q", role: "user", content: "Question" },
+          { id: "a", role: "assistant", content: "Plain" },
+          { id: "b", role: "assistant", content: "Backed", dcrRole: "Caseworker",
+            supportingContent: [{ id: "e", title: "Law", content: "Evidence" }] },
+        ]}
+      />,
+    );
+    const buttons = [...(container?.querySelectorAll(".dcrChat__supportButton") ?? [])];
+    expect(buttons).toHaveLength(1);
+    expect(buttons[0]?.closest(".dcrChat__message")?.textContent).toContain("Backed");
+    expect(buttons[0]?.parentElement?.previousElementSibling?.textContent).toBe("Caseworker");
+  });
+
+  it("formats .json citations and supporting content as a structured tree", () => {
+    const excerpt = "{\"case_id\": \"CASE-1\", \"decision_outcome\": \"negativ\", "
+      + "\"timeline\": [{\"id\": \"e1\", \"law_paragraphs\": [\"law86\"], \"ok\": true}], \"note\": null, \"summary\": \"Cut mid";
+    render(
+      <ChatApp
+        {...props}
+        messages={[{
+          id: "answer",
+          role: "assistant",
+          content: "Similar case found [case.json]",
+          supportingContent: [{ id: "s", title: "case.json", content: excerpt, source: "cases/case.json" }],
+          citations: [{ id: "c", title: "case.json", source: "cases/case.json", kind: "case", excerpt }],
+        }]}
+      />,
+    );
+
+    act(() => button("[1] case.json")?.click());
+    const panel = container?.querySelector('[role="tabpanel"]');
+    expect(panel?.querySelector("blockquote")).toBeNull();
+    const json = panel?.querySelector(".dcrChat__json");
+    expect(json).not.toBeNull();
+    const keys = [...(json?.querySelectorAll(":scope > dl > div > dt") ?? [])].map((dt) => dt.textContent);
+    expect(keys).toEqual(["case_id", "decision_outcome", "timeline", "note", "summary"]);
+    expect(json?.querySelector("details summary")?.textContent).toBe("1 item");
+    expect(json?.querySelector(".dcrChat__jsonBoolean")?.textContent).toBe("true");
+    expect(json?.querySelector(".dcrChat__jsonNull")?.textContent).toBe("null");
+    expect(json?.querySelector(".dcrChat__jsonList--inline li")?.textContent).toBe("law86");
+    expect(json?.textContent).toContain("Cut mid");
+    expect(json?.querySelector("small")?.textContent).toContain("cut mid-document");
+
+    const supportingTab = [...(container?.querySelectorAll<HTMLButtonElement>('[role="tab"]') ?? [])]
+      .find((tab) => tab.textContent === "Supporting Content");
+    act(() => supportingTab?.click());
+    const support = container?.querySelector('[role="tabpanel"] .dcrChat__supportingContent');
+    expect(support).not.toBeNull();
+    expect(support?.querySelector(".dcrChat__json dl")).not.toBeNull();
+    expect(support?.querySelector(".dcrChat__markdown")).toBeNull();
+  });
+
+  it("re-indents a .json excerpt that cannot be recovered", () => {
+    render(
+      <ChatApp
+        {...props}
+        messages={[{
+          id: "answer",
+          role: "assistant",
+          content: "Case",
+          citations: [{ id: "c", title: "c", source: "c.json", kind: "case", excerpt: "{\"a\": 1]" }],
+        }]}
+      />,
+    );
+    act(() => button("[1] c")?.click());
+    const raw = container?.querySelector('[role="tabpanel"] pre.dcrChat__json--raw');
+    expect(raw?.textContent).toBe("{\n  \"a\": 1\n]");
+  });
+
+  it("shows a DCR Graph icon on Assistant answers only when a graph panel exists", () => {
+    render(
+      <ChatApp
+        {...props}
+        messages={[
+          { id: "q", role: "user", content: "Question" },
+          { id: "a", role: "assistant", content: "Answer" },
+        ]}
+      />,
+    );
+    expect(container?.querySelector(".dcrChat__graphButton")).toBeNull();
+
+    render(
+      <ChatApp
+        {...props}
+        graphPanel={<div>Graph viewer</div>}
+        messages={[
+          { id: "q", role: "user", content: "Question" },
+          { id: "a", role: "assistant", content: "Answer" },
+        ]}
+      />,
+    );
+    const graphButtons = [...(container?.querySelectorAll<HTMLButtonElement>(".dcrChat__graphButton") ?? [])];
+    expect(graphButtons).toHaveLength(1);
+    const graphButton = graphButtons[0];
+    expect(graphButton?.closest(".dcrChat__message--assistant")).not.toBeNull();
+    expect(graphButton?.getAttribute("aria-label")).toBe("DCR Graph");
+    expect(graphButton?.querySelector("svg")).not.toBeNull();
+    expect(graphButton?.parentElement?.previousElementSibling?.textContent).toBe("Assistant");
+
+    act(() => graphButton?.click());
+    expect(container?.querySelector('[role="tabpanel"]')?.textContent).toContain("Graph viewer");
+    expect(graphButton?.getAttribute("aria-pressed")).toBe("true");
   });
 });
 

@@ -4,17 +4,30 @@ DCR Controller combines the DCR-js frontend with a local FastAPI backend. DCR gr
 
 ## Requirements
 
-- Python 3.10 or newer
+- [uv](https://docs.astral.sh/uv/) (it installs the pinned Python from `.python-version` automatically)
 - Node.js and Yarn Classic
 
 Install the dependencies from the project root:
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r backend/requirements.txt
+uv sync
 cd frontend && yarn install && cd ..
 ```
+
+`uv sync` creates `.venv` from `pyproject.toml` and `uv.lock`. `backend/requirements.txt` is kept for reference only; add new Python dependencies with `uv add <package>`.
+
+## Configure the language model
+
+The backend reads its configuration from a `.env` file in the project root and refuses to start without it. Create it from the template:
+
+```bash
+cp .env.example .env
+```
+
+`LLM_PROVIDER` selects the provider:
+
+- `local` (default) runs a GGUF model through llama.cpp. `LOCAL_LLM_REPOSITORY` and `LOCAL_LLM_FILENAME` name the Hugging Face repository and file; the model is downloaded to `backend/models/local_llm` on first use.
+- `azure` uses Azure OpenAI via `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_DEPLOYMENT_NAME` and `AZURE_OPENAI_API_KEY`.
 
 ## Start the application
 
@@ -51,6 +64,6 @@ The API accepts only well-formed XML using the DCR editor `definitions` root ele
 ## Tests and builds
 
 ```bash
-cd backend && python -m pytest tests
+cd backend && uv run python -m pytest tests
 cd ../frontend && yarn workspace app predeploy
 ```

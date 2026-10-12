@@ -1,0 +1,45 @@
+[project]
+name = "legal-dcr-llm-chatbot"
+version = "0.1.0"
+description = "DCR Controller: DCR-js frontend with a FastAPI backend and LLM chat."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "numpy",
+    "pandas",
+    "deprecation",
+    "networkx",
+    "graphviz",
+    "wheel",
+    "setuptools",
+    "intervaltree",
+    "lxml",
+    "matplotlib",
+    "pydotplus",
+    "pytz",
+    "scipy",
+    "tqdm",
+    "python-dateutil",
+    "cvxopt",
+    "isodate",
+    "pillow",
+    "fastapi",
+    "uvicorn[standard]",
+    "httpx",
+    "openai",
+    "huggingface-hub",
+    "llama-cpp-python",
+    "python-dotenv",
+    "jinja2",
+    "sentence-transformers>=5",
+    "pypdf",
+]
+
+[dependency-groups]
+dev = [
+    "pytest",
+]
+
+[tool.uv]
+# This repository is an application, not an installable package.
+package = false

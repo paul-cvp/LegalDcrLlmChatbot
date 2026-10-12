@@ -28,6 +28,8 @@ export interface ChatCitation {
 
 export interface SupportingContentItem {
   id: string;
+  /** "thinking" marks model reasoning extracted from `<think>` tags. */
+  kind?: "thinking";
   title: string;
   content: string;
   source?: string;

@@ -14,6 +14,11 @@ cleanup() {
 
 trap cleanup INT TERM EXIT
 
+if ! command -v uv >/dev/null 2>&1; then
+  echo "uv is required but was not found on PATH. Install it from https://docs.astral.sh/uv/" >&2
+  exit 1
+fi
+
 wait_for_backend() {
   local health_url="http://127.0.0.1:${BACKEND_PORT:-8000}/docs"
   echo "Waiting for backend startup..."
@@ -29,7 +34,7 @@ wait_for_backend() {
 
 (
   cd "$PROJECT_DIR/backend"
-  python3 -m uvicorn main:app \
+  uv run --project "$PROJECT_DIR" python -m uvicorn main:app \
     --host "${BACKEND_HOST:-0.0.0.0}" \
     --port "${BACKEND_PORT:-8000}" \
     --reload

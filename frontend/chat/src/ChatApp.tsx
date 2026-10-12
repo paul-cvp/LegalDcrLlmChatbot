@@ -21,6 +21,9 @@ import type {
   GraphCandidate,
   SearchIndex,
 } from "./types";
+import { isJsonSource } from "./json";
+import { JsonExcerpt } from "./JsonView";
+import { isThinkingItem, presentMessage } from "./thinking";
 import "./styles.css";
 
 type AnalysisTab = "supporting" | "citation" | "graph";
@@ -85,9 +88,11 @@ export function ChatApp({
   const [editError, setEditError] = useState<string>();
   const streamEnd = useRef<HTMLDivElement>(null);
 
+  /** Messages with `<think>` reasoning moved into their supporting content. */
+  const presented = useMemo(() => messages.map(presentMessage), [messages]);
   const selectedMessage = useMemo(
-    () => messages.find((message) => message.id === selectedMessageId),
-    [messages, selectedMessageId],
+    () => presented.find((message) => message.id === selectedMessageId),
+    [presented, selectedMessageId],
   );
   const selectedCitation = selectedMessage?.citations?.find(
     (citation) => citation.id === selectedCitationId,
@@ -162,6 +167,12 @@ export function ChatApp({
     setEditError(undefined);
   };
 
+  const cancelEditing = () => {
+    setEditingMessageId(undefined);
+    setEditingDraft("");
+    setEditError(undefined);
+  };
+
   const submitEdit = async (event: FormEvent, message: ChatMessage) => {
     event.preventDefault();
     const text = editingDraft.trim();
@@ -172,9 +183,14 @@ export function ChatApp({
       return;
     }
     await onEditAnswer(message.id, input);
-    setEditingMessageId(undefined);
-    setEditingDraft("");
-    setEditError(undefined);
+    cancelEditing();
+  };
+
+  /** Rewinds a typed answer using the same Yes/No or number widget as the composer. */
+  const submitTypedEdit = async (message: ChatMessage, input: ChatInput) => {
+    if (!onEditAnswer) return;
+    await onEditAnswer(message.id, input);
+    cancelEditing();
   };
 
   return (
@@ -223,7 +239,7 @@ export function ChatApp({
               </div>
             )}
 
-            {messages.map((message) => (
+            {presented.map((message) => (
               <article
                 className={`dcrChat__message dcrChat__message--${message.role}`}
                 key={message.id}
@@ -231,6 +247,38 @@ export function ChatApp({
                 <div className="dcrChat__messageHeading">
                   <strong>{ROLE_LABELS[message.role]}</strong>
                   {message.dcrRole && <span>{message.dcrRole}</span>}
+                  {message.role !== "user" && (!!message.supportingContent?.length || graphPanel) && (
+                    <span className="dcrChat__headingTools">
+                      {!!message.supportingContent?.length && (
+                        <button
+                          className="dcrChat__headingIcon dcrChat__supportButton"
+                          type="button"
+                          aria-label="Supporting Content"
+                          title="Open Supporting Content"
+                          aria-pressed={analysisTab === "supporting" && selectedMessageId === message.id}
+                          onClick={() => openSupportingContent(message)}
+                        >
+                          <svg aria-hidden="true" viewBox="0 0 24 24">
+                            <path d="M6 2h8l6 6v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2Zm7 1.5V9h5.5L13 3.5ZM8 12h8v1.6H8V12Zm0 3.4h8V17H8v-1.6Zm0-6.8h3v1.6H8V8.6Z" />
+                          </svg>
+                        </button>
+                      )}
+                      {graphPanel && (
+                        <button
+                          className="dcrChat__headingIcon dcrChat__graphButton"
+                          type="button"
+                          aria-label="DCR Graph"
+                          title="Open DCR Graph"
+                          aria-pressed={analysisTab === "graph"}
+                          onClick={openGraph}
+                        >
+                          <svg aria-hidden="true" viewBox="0 0 24 24">
+                            <path d="M12 2a3 3 0 0 1 .8 5.9v2.3l5.2 3a3 3 0 1 1-.8 1.4l-5.2-3-5.2 3a3 3 0 1 1-.8-1.4l5.2-3V7.9A3 3 0 0 1 12 2Zm0 1.6a1.4 1.4 0 1 0 0 2.8 1.4 1.4 0 0 0 0-2.8ZM5 15.6a1.4 1.4 0 1 0 0 2.8 1.4 1.4 0 0 0 0-2.8Zm14 0a1.4 1.4 0 1 0 0 2.8 1.4 1.4 0 0 0 0-2.8Z" />
+                          </svg>
+                        </button>
+                      )}
+                    </span>
+                  )}
                   {message.role === "user" && message.editable && onEditAnswer && (
                     <button
                       className="dcrChat__editAnswer"
@@ -256,7 +304,18 @@ export function ChatApp({
                   )}
                   {message.createdAt && <time dateTime={message.createdAt}>{formatDate(message.createdAt)}</time>}
                 </div>
-                {editingMessageId === message.id ? (
+                {editingMessageId === message.id && message.answerType ? (
+                  <div className="dcrChat__answerEditor dcrChat__answerEditor--typed">
+                    <ExpectedAnswerWidget
+                      type={message.answerType}
+                      disabled={loading}
+                      currentValue={typedAnswer(message.content, message.answerType)}
+                      submitLabel="Save"
+                      onSubmit={(input) => submitTypedEdit(message, input)}
+                      onCancel={cancelEditing}
+                    />
+                  </div>
+                ) : editingMessageId === message.id ? (
                   <form className="dcrChat__answerEditor" onSubmit={(event) => void submitEdit(event, message)}>
                     <textarea
                       aria-label="Edit answer text"
@@ -268,14 +327,7 @@ export function ChatApp({
                     />
                     {editError && <small className="dcrChat__fieldError">{editError}</small>}
                     <div>
-                      <button
-                        type="button"
-                        disabled={loading}
-                        onClick={() => {
-                          setEditingMessageId(undefined);
-                          setEditError(undefined);
-                        }}
-                      >
+                      <button type="button" disabled={loading} onClick={cancelEditing}>
                         Cancel
                       </button>
                       <button
@@ -296,6 +348,11 @@ export function ChatApp({
                       }}
                       onSelect={selectCitation}
                     />
+                    {!message.content.trim() && message.supportingContent?.some(isThinkingItem) && (
+                      <p className="dcrChat__reasoningOnly">
+                        The model only produced reasoning. Open Supporting Content to read it.
+                      </p>
+                    )}
                   </div>
                 )}
                 {message.role === "user" && message.interpretedValue && (
@@ -515,30 +572,64 @@ export function ChatApp({
 interface ExpectedAnswerWidgetProps {
   type: ExpectedAnswerType;
   disabled: boolean;
+  /** The answer being rewound; it is pre-filled and cannot be re-submitted unchanged. */
+  currentValue?: ChatInput;
+  submitLabel?: string;
   onSubmit: (input: ChatInput) => void | Promise<void>;
+  onCancel?: () => void;
 }
 
-function ExpectedAnswerWidget({ type, disabled, onSubmit }: ExpectedAnswerWidgetProps) {
-  const [integer, setInteger] = useState("");
+function ExpectedAnswerWidget({
+  type,
+  disabled,
+  currentValue,
+  submitLabel = "Submit",
+  onSubmit,
+  onCancel,
+}: ExpectedAnswerWidgetProps) {
+  const initialInteger = type === "int" && typeof currentValue === "number" ? String(currentValue) : "";
+  const [integer, setInteger] = useState(initialInteger);
   const [error, setError] = useState<string>();
 
   useEffect(() => {
-    setInteger("");
+    setInteger(initialInteger);
     setError(undefined);
-  }, [type]);
+  }, [initialInteger, type]);
+
+  const cancel = onCancel && (
+    <button className="dcrChat__cancel" type="button" disabled={disabled} onClick={onCancel}>
+      Cancel
+    </button>
+  );
 
   if (type === "bool") {
+    const choice = (value: boolean, label: string) => {
+      const current = currentValue === value;
+      return (
+        <button
+          type="button"
+          aria-pressed={currentValue === undefined ? undefined : current}
+          title={current ? "Current answer" : undefined}
+          disabled={disabled || current}
+          onClick={() => void onSubmit(value)}
+        >
+          {label}
+        </button>
+      );
+    };
     return (
       <div className="dcrChat__answerWidget" aria-label="Expected Boolean answer">
-        <span>Choose an answer</span>
+        <span>{currentValue === undefined ? "Choose an answer" : "Change your answer"}</span>
         <div>
-          <button type="button" disabled={disabled} onClick={() => void onSubmit(true)}>Yes</button>
-          <button type="button" disabled={disabled} onClick={() => void onSubmit(false)}>No</button>
+          {choice(true, "Yes")}
+          {choice(false, "No")}
+          {cancel}
         </div>
       </div>
     );
   }
 
+  const unchanged = integer.trim() !== "" && integer.trim() === initialInteger;
   const submitInteger = (event: FormEvent) => {
     event.preventDefault();
     const value = Number(integer);
@@ -546,6 +637,7 @@ function ExpectedAnswerWidget({ type, disabled, onSubmit }: ExpectedAnswerWidget
       setError("Enter a whole number.");
       return;
     }
+    if (unchanged) return;
     setInteger("");
     setError(undefined);
     void onSubmit(value);
@@ -554,11 +646,12 @@ function ExpectedAnswerWidget({ type, disabled, onSubmit }: ExpectedAnswerWidget
   return (
     <form className="dcrChat__answerWidget" aria-label="Expected Integer answer" onSubmit={submitInteger}>
       <label>
-        <span>Enter a whole number</span>
+        <span>{currentValue === undefined ? "Enter a whole number" : "Change your answer"}</span>
         <input
           type="number"
           step="1"
           inputMode="numeric"
+          autoFocus={currentValue !== undefined}
           value={integer}
           disabled={disabled}
           onChange={(event) => {
@@ -567,7 +660,8 @@ function ExpectedAnswerWidget({ type, disabled, onSubmit }: ExpectedAnswerWidget
           }}
         />
       </label>
-      <button type="submit" disabled={disabled || !integer.trim()}>Submit</button>
+      <button type="submit" disabled={disabled || !integer.trim() || unchanged}>{submitLabel}</button>
+      {cancel}
       {error && <small className="dcrChat__fieldError">{error}</small>}
     </form>
   );
@@ -692,9 +786,11 @@ function SupportingContent({ items }: { items: NonNullable<ChatMessage["supporti
   return (
     <div className="dcrChat__supportingContent">
       {items.map((item) => (
-        <article key={item.id}>
+        <article key={item.id} className={isThinkingItem(item) ? "dcrChat__thinking" : undefined}>
           <h3>{item.url ? <a href={item.url} target="_blank" rel="noreferrer">{item.title}</a> : item.title}</h3>
-          <div className="dcrChat__markdown"><ReactMarkdown remarkPlugins={[remarkGfm]}>{item.content}</ReactMarkdown></div>
+          {isJsonSource(item.source)
+            ? <JsonExcerpt text={item.content} />
+            : <div className="dcrChat__markdown"><ReactMarkdown remarkPlugins={[remarkGfm]}>{item.content}</ReactMarkdown></div>}
           {item.source && <small>{item.source}</small>}
           {item.metadata && (
             <dl>
@@ -741,7 +837,11 @@ function CitationContent({ citations, selectedCitation, message, panel, onSelect
           </button>
         ))}
       </div>
-      {selectedCitation?.excerpt && <blockquote>{selectedCitation.excerpt}</blockquote>}
+      {selectedCitation?.excerpt && (
+        isJsonSource(selectedCitation.source)
+          ? <JsonExcerpt text={selectedCitation.excerpt} />
+          : <blockquote>{selectedCitation.excerpt}</blockquote>
+      )}
       {panel && <div className="dcrChat__citationPanel">{panel}</div>}
     </div>
   );
